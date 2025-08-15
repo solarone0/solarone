@@ -5,43 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>나만의 블로그</title>
     
-    <!-- 필요한 라이브러리 (Tailwind CSS, Showdown) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
 
-    <!-- 폰트 (Pretendard) -->
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <!-- ⚠️ 중요: 이 아래 부분에 자신의 Firebase 연결 정보(Config)를 붙여넣게 됩니다. -->
+    <script type="module">
+        // ❗️ 2단계에서 얻은 자신의 키 값으로 이 객체 안의 내용을 교체해주세요.
+            const firebaseConfig = {
+              apiKey: "AIzaSyB_uy-LEsp4Wyh9yo8ft47ECUGjW7oVLxQ",
+              authDomain: "my-github-blog-b7120.firebaseapp.com",
+              projectId: "my-github-blog-b7120",
+              storageBucket: "my-github-blog-b7120.firebasestorage.app",
+              messagingSenderId: "404978783943",
+              appId: "1:404978783943:web:dcae33877d8b236068d0e2",
+              measurementId: "G-7964S4Z1K5"
+            };
+
+        // --- Firebase SDK (아래 코드는 수정할 필요 없습니다) ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 다른 스크립트에서 쓸 수 있도록 전역 변수로 설정
+        window.db = db;
+        window.firebase = { collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp };
+    </script>
 
     <style>
-        /* 다크모드 및 기본 스타일 */
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #334155;
-            --text-muted-color: #64748b;
-            --heading-color: #1e293b;
-            --card-bg-color: #ffffff;
-            --border-color: #e2e8f0;
-            --link-color: #2563eb;
-            --code-bg-color: #f1f5f9;
-        }
-        html.dark {
-            --bg-color: #020617;
-            --text-color: #cbd5e1;
-            --text-muted-color: #94a3b8;
-            --heading-color: #f1f5f9;
-            --card-bg-color: #0f172a;
-            --border-color: #334155;
-            --link-color: #60a5fa;
-            --code-bg-color: #1e293b;
-        }
-        body {
-            font-family: 'Pretendard', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: background-color 0.3s, color 0.3s;
-        }
-        
-        /* 마크다운 렌더링 스타일 */
+        :root { --bg-color: #ffffff; --text-color: #334155; --text-muted-color: #64748b; --heading-color: #1e293b; --card-bg-color: #ffffff; --border-color: #e2e8f0; --link-color: #2563eb; --code-bg-color: #f1f5f9; }
+        html.dark { --bg-color: #020617; --text-color: #cbd5e1; --text-muted-color: #94a3b8; --heading-color: #f1f5f9; --card-bg-color: #0f172a; --border-color: #334155; --link-color: #60a5fa; --code-bg-color: #1e293b; }
+        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-color); color: var(--text-color); transition: background-color 0.3s, color 0.3s; }
         .prose { max-width: 42rem; margin-left: auto; margin-right: auto; color: var(--text-color); }
         .prose h1, .prose h2, .prose h3 { font-weight: 800; margin-top: 2em; margin-bottom: 1em; color: var(--heading-color); }
         .prose p { margin-top: 1.5em; margin-bottom: 1.5em; line-height: 1.9; font-size: 1.125rem; }
@@ -84,7 +79,6 @@
         </div>
     </div>
 
-    <!-- Detail View: Fullscreen Post -->
     <div id="detail-view" class="view" style="background-color: var(--bg-color);">
         <div class="fixed top-4 left-4 z-10 flex items-center space-x-4">
             <button id="back-to-list-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors">
@@ -110,7 +104,6 @@
         </div>
     </div>
     
-    <!-- Admin View -->
     <div id="admin-view" class="view">
         <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
             <h2 class="text-3xl font-bold mb-2" style="color: var(--heading-color);">블로그 설정</h2>
@@ -132,7 +125,6 @@
         </div>
     </div>
 
-    <!-- Post Modal (Editor) -->
     <div id="post-modal" class="fixed inset-0 bg-black/60 h-full w-full z-30 flex items-center justify-center p-4 hidden">
         <div class="w-full max-w-6xl shadow-2xl rounded-lg flex flex-col h-[90vh]" style="background-color: var(--card-bg-color);">
             <form id="post-form" class="flex flex-col h-full">
@@ -160,11 +152,12 @@
         </div>
     </div>
     
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- Dark Mode ---
+    <script type="module">
+        document.addEventListener('DOMContentLoaded', async () => {
+            const { db, firebase } = window;
+            
             const setupDarkMode = () => {
-                if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                     document.documentElement.classList.add('dark');
                 } else {
                     document.documentElement.classList.remove('dark');
@@ -172,7 +165,6 @@
             };
             setupDarkMode();
 
-            // --- DOM Elements ---
             const views = { main: document.getElementById('main-view'), detail: document.getElementById('detail-view'), admin: document.getElementById('admin-view') };
             const blogTitle = document.getElementById('blog-title');
             const blogDescription = document.getElementById('blog-description');
@@ -204,7 +196,6 @@
             const cancelPostBtn = document.getElementById('cancel-post-btn');
             const editorToolbar = document.getElementById('editor-toolbar');
 
-            // --- Editor Toolbar ---
             const toolbarButtons = [ { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>`, action: 'bold', title: '굵게' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>`, action: 'italic', title: '기울임' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h12v2H6zm8.12-3.29L18.83 9H16V7h6v6h-2V9.83l-4.71 4.71-1.42-1.42zM4 5h10v2H4z"/></svg>`, action: 'heading', title: '제목' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2V7H6v2zm4 0h2V7h-2v2zm4 0h2V7h-2v2z"/></svg>`, action: 'blockquote', title: '인용문' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>`, action: 'link', title: '링크' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`, action: 'image', title: '이미지' }, ];
             toolbarButtons.forEach(btn => { const button = document.createElement('button'); button.type = 'button'; button.className = 'p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700'; button.title = btn.title; button.innerHTML = btn.icon; button.addEventListener('click', () => handleToolbarClick(btn.action)); editorToolbar.appendChild(button); });
 
@@ -225,47 +216,53 @@
                 updatePreview();
             }
             
-            // --- State and Data ---
             let posts = [];
             let currentFilter = { search: '', tag: '' };
             let editingPostId = null;
             const converter = new showdown.Converter({ ghCompatibleHeaderId: true, simpleLineBreaks: true, strikethrough: true, tables: true });
             
-            // --- View Management ---
             const showView = (viewName) => { Object.values(views).forEach(view => view.classList.remove('active')); if(views[viewName]) views[viewName].classList.add('active'); document.body.style.overflow = viewName === 'detail' ? 'hidden' : ''; document.documentElement.style.overflow = viewName === 'detail' ? 'hidden' : ''; };
             
-            // --- Data Persistence (localStorage) ---
-            const loadData = () => {
+            const postsCollection = firebase.collection(db, "posts");
+            const configDoc = firebase.doc(db, "config", "siteInfo");
+
+            const loadData = async () => {
                 try {
-                    const storedPosts = localStorage.getItem('my-blog-posts');
-                    posts = storedPosts ? JSON.parse(storedPosts) : [{ id: 1, title: 'GitHub Pages 블로그에 오신 것을 환영합니다!', content: '이 블로그는 Firebase 없이, 오직 GitHub Pages와 브라우저의 LocalStorage만을 사용하여 작동합니다.\n\n### 주요 기능\n\n- **데이터베이스 없음**: 모든 글은 현재 사용 중인 브라우저에 안전하게 저장됩니다.\n- **모든 기능 포함**: 글 작성, 수정, 삭제, 태그, 검색, 다크모드 등 모든 기능을 사용할 수 있습니다.\n\n> 지금 바로 첫 글을 작성해보세요!', tags: ['안내', '블로그'], createdAt: new Date().toISOString() }];
-                } catch (e) { console.error("게시물 로딩 실패:", e); posts = []; }
+                    const q = firebase.query(postsCollection, firebase.orderBy("createdAt", "desc"));
+                    const querySnapshot = await firebase.getDocs(q);
+                    posts = querySnapshot.docs.map(doc => {
+                        const data = doc.data();
+                        return { 
+                            id: doc.id, 
+                            ...data,
+                            createdAt: data.createdAt?.toDate() || new Date()
+                        };
+                    });
+                } catch (e) { console.error("게시물 로딩 실패:", e); alert("게시물을 불러오는데 실패했습니다. Firebase 설정을 확인해주세요."); }
             };
 
-            const saveData = () => {
+            const loadSiteInfo = async () => {
                 try {
-                    localStorage.setItem('my-blog-posts', JSON.stringify(posts));
-                } catch (e) { console.error("게시물 저장 실패:", e); }
-            };
-            
-            const loadSiteInfo = () => {
-                const title = localStorage.getItem('my-blog-title') || '나의 블로그';
-                const description = localStorage.getItem('my-blog-description') || '이 공간은 생각과 지식을 기록하기 위해 만들어졌습니다.';
-                blogTitle.textContent = title;
-                blogDescription.textContent = description;
-                adminTitleInput.value = title;
-                adminDescriptionInput.value = description;
+                    const docSnap = await firebase.getDoc(configDoc);
+                    const data = docSnap.exists() ? docSnap.data() : { title: '나의 블로그', description: '이 공간은 생각과 지식을 기록하기 위해 만들어졌습니다.' };
+                    blogTitle.textContent = data.title;
+                    blogDescription.textContent = data.description;
+                    adminTitleInput.value = data.title;
+                    adminDescriptionInput.value = data.description;
+                } catch(e) { console.error("사이트 정보 로딩 실패:", e); }
             };
 
-            const saveSiteInfo = () => {
-                localStorage.setItem('my-blog-title', adminTitleInput.value);
-                localStorage.setItem('my-blog-description', adminDescriptionInput.value);
-                loadSiteInfo();
-                alert("정보가 저장되었습니다.");
-                showView('main');
+            const saveSiteInfo = async () => {
+                try {
+                    const newTitle = adminTitleInput.value;
+                    const newDescription = adminDescriptionInput.value;
+                    await firebase.setDoc(configDoc, { title: newTitle, description: newDescription });
+                    loadSiteInfo();
+                    alert("정보가 저장되었습니다.");
+                    showView('main');
+                } catch (e) { console.error("사이트 정보 저장 실패:", e); }
             };
 
-            // --- Rendering ---
             function render() { renderPosts(); renderTags(); }
             function renderPosts() {
                 postsList.innerHTML = '';
@@ -274,9 +271,8 @@
                     const tagMatch = !currentFilter.tag || p.tags.includes(currentFilter.tag);
                     return searchMatch && tagMatch;
                 });
-                const sortedPosts = filteredPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                if (sortedPosts.length === 0) { postsList.innerHTML = `<li class="text-center py-10" style="color: var(--text-muted-color);">표시할 게시물이 없습니다.</li>`; return; }
-                sortedPosts.forEach(post => {
+                if (filteredPosts.length === 0) { postsList.innerHTML = `<li class="text-center py-10" style="color: var(--text-muted-color);">표시할 게시물이 없습니다.</li>`; return; }
+                filteredPosts.forEach(post => {
                     const listItem = document.createElement('li');
                     const excerpt = (post.content.replace(/<[^>]*>?/gm, '').replace(/[#*`>_~-]/g, '')).substring(0, 150) + '...';
                     listItem.innerHTML = `<div class="group cursor-pointer p-6 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" data-id="${post.id}"><p class="text-sm" style="color: var(--text-muted-color);">${new Date(post.createdAt).toLocaleDateString('ko-KR')}</p><h2 class="text-2xl font-bold mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400" style="color: var(--heading-color);">${post.title}</h2><p class="mt-2 leading-relaxed">${excerpt}</p><div class="mt-4 flex flex-wrap gap-2">${post.tags.map(tag => `<span class="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">${tag}</span>`).join('')}</div></div>`;
@@ -291,7 +287,6 @@
                 allTags.forEach(tag => tagsContainer.appendChild(createTagButton(tag)));
             }
 
-            // --- Event Handlers ---
             postsList.addEventListener('click', (e) => { const postElement = e.target.closest('.group'); if (postElement) showPostDetail(postElement.dataset.id); });
             function showPostDetail(postId) {
                 const post = posts.find(p => p.id == postId);
@@ -316,13 +311,18 @@
                 updatePreview();
                 postModal.classList.remove('hidden');
             });
-            deletePostBtn.addEventListener('click', (e) => {
+            deletePostBtn.addEventListener('click', async (e) => {
                 const idToDelete = e.currentTarget.dataset.id;
-                if (confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
-                    posts = posts.filter(p => p.id != idToDelete);
-                    saveData();
-                    render();
-                    showView('main');
+                if (confirm("정말로 이 게시물을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+                    try {
+                        await firebase.deleteDoc(firebase.doc(db, "posts", idToDelete));
+                        await loadData();
+                        render();
+                        showView('main');
+                    } catch (err) {
+                        console.error("삭제 실패:", err);
+                        alert("게시물을 삭제하는 데 실패했습니다.");
+                    }
                 }
             });
 
@@ -335,34 +335,40 @@
             const updatePreview = () => { markdownPreview.innerHTML = converter.makeHtml(postContentInput.value); };
             postContentInput.addEventListener('input', updatePreview);
 
-            postForm.addEventListener('submit', (e) => {
+            postForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const nextId = posts.length > 0 ? Math.max(...posts.map(p => p.id)) + 1 : 1;
                 const postData = {
                     title: postTitleInput.value,
                     content: postContentInput.value,
                     tags: postTagsInput.value.split(',').map(t => t.trim()).filter(Boolean)
                 };
-                if (editingPostId) {
-                    const postIndex = posts.findIndex(p => p.id == editingPostId);
-                    if (postIndex > -1) posts[postIndex] = { ...posts[postIndex], ...postData };
-                } else {
-                    posts.push({ id: nextId, ...postData, createdAt: new Date().toISOString() });
+                try {
+                    if (editingPostId) {
+                        const postRef = firebase.doc(db, "posts", editingPostId);
+                        await firebase.updateDoc(postRef, postData);
+                    } else {
+                        postData.createdAt = firebase.serverTimestamp();
+                        await firebase.addDoc(postsCollection, postData);
+                    }
+                    await loadData();
+                    render();
+                    closePostModal();
+                } catch (err) {
+                    console.error("저장 실패: ", err);
+                    alert("게시물을 저장하는 데 실패했습니다.");
                 }
-                saveData();
-                render();
-                closePostModal();
-                showView('main');
             });
             
             goToAdminBtn.addEventListener('click', () => showView('admin'));
             adminCancelBtn.addEventListener('click', () => showView('main'));
             adminForm.addEventListener('submit', (e) => { e.preventDefault(); saveSiteInfo(); });
             
-            // --- Initialization ---
-            loadData();
-            loadSiteInfo();
-            render();
+            const init = async () => {
+                await loadSiteInfo();
+                await loadData();
+                render();
+            };
+            init();
         });
     </script>
 </body>
