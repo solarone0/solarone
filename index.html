@@ -13,9 +13,9 @@
         // 1. 분리된 firebase-config.js 파일에서 설정 정보를 가져옵니다.
         import firebaseConfig from './firebase-config.js';
 
-        // --- Firebase SDK (아래 코드는 수정할 필요 없습니다) ---
+        // --- Firebase SDK (Google Auth Provider로 변경) ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GithubAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
@@ -26,7 +26,8 @@
         window.auth = auth;
         window.firebase = { 
             collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp,
-            GithubAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+            GoogleAuthProvider, // Github에서 Google로 변경
+            signInWithPopup, signOut, onAuthStateChanged
         };
     </script>
 
@@ -294,9 +295,11 @@
                     document.getElementById('logout-btn').addEventListener('click', () => firebase.signOut(auth));
                 } else {
                     adminElements.forEach(el => el.style.display = 'none');
-                    authContainer.innerHTML = `<button id="login-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">GitHub 로그인</button>`;
+                    // Google 로그인 버튼으로 변경
+                    authContainer.innerHTML = `<button id="login-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">Google 로그인</button>`;
                     document.getElementById('login-btn').addEventListener('click', async () => {
-                        const provider = new firebase.GithubAuthProvider();
+                        // GoogleAuthProvider 사용
+                        const provider = new firebase.GoogleAuthProvider();
                         try { await firebase.signInWithPopup(auth, provider); } catch (error) { console.error("로그인 실패:", error); }
                     });
                 }
