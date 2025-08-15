@@ -8,41 +8,39 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
 
-    <!-- ⚠️ 중요: 이 아래 부분에 자신의 Firebase 연결 정보(Config)를 붙여넣게 됩니다. -->
+    <!-- Firebase SDK -->
     <script type="module">
-        // ❗️ 2단계에서 얻은 자신의 키 값으로 이 객체 안의 내용을 교체해주세요.
-            const firebaseConfig = {
-              apiKey: "AIzaSyB_uy-LEsp4Wyh9yo8ft47ECUGjW7oVLxQ",
-              authDomain: "my-github-blog-b7120.firebaseapp.com",
-              projectId: "my-github-blog-b7120",
-              storageBucket: "my-github-blog-b7120.firebasestorage.app",
-              messagingSenderId: "404978783943",
-              appId: "1:404978783943:web:dcae33877d8b236068d0e2",
-              measurementId: "G-7964S4Z1K5"
-            };
+        // 1. 분리된 firebase-config.js 파일에서 설정 정보를 가져옵니다.
+        import firebaseConfig from './firebase-config.js';
 
         // --- Firebase SDK (아래 코드는 수정할 필요 없습니다) ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, GithubAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // 다른 스크립트에서 쓸 수 있도록 전역 변수로 설정
         window.db = db;
-        window.firebase = { collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp };
+        window.auth = auth;
+        window.firebase = { 
+            collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp,
+            GithubAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+        };
     </script>
 
     <style>
         :root { --bg-color: #ffffff; --text-color: #334155; --text-muted-color: #64748b; --heading-color: #1e293b; --card-bg-color: #ffffff; --border-color: #e2e8f0; --link-color: #2563eb; --code-bg-color: #f1f5f9; }
         html.dark { --bg-color: #020617; --text-color: #cbd5e1; --text-muted-color: #94a3b8; --heading-color: #f1f5f9; --card-bg-color: #0f172a; --border-color: #334155; --link-color: #60a5fa; --code-bg-color: #1e293b; }
-        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-color); color: var(--text-color); transition: background-color 0.3s, color 0.3s; }
+        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
         .prose { max-width: 42rem; margin-left: auto; margin-right: auto; color: var(--text-color); }
         .prose h1, .prose h2, .prose h3 { font-weight: 800; margin-top: 2em; margin-bottom: 1em; color: var(--heading-color); }
         .prose p { margin-top: 1.5em; margin-bottom: 1.5em; line-height: 1.9; font-size: 1.125rem; }
         .view { display: none; }
         .view.active { display: block; animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .admin-only { display: none; }
     </style>
 </head>
 <body>
@@ -55,12 +53,10 @@
                     <div class="space-y-6">
                         <div class="flex items-center justify-between">
                             <h1 id="blog-title" class="text-3xl font-bold" style="color: var(--heading-color);">나의 블로그</h1>
-                            <button id="go-to-admin-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" title="관리자 설정">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                            </button>
+                            <div id="auth-container"></div>
                         </div>
                         <p id="blog-description" style="color: var(--text-muted-color);">이 공간은 생각과 지식을 기록하기 위해 만들어졌습니다.</p>
-                        <button id="new-post-btn" class="w-full bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500 px-4 py-2 rounded-lg shadow hover:bg-slate-700 focus:outline-none transition-colors">
+                        <button id="new-post-btn" class="w-full bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500 px-4 py-2 rounded-lg shadow hover:bg-slate-700 focus:outline-none transition-colors admin-only">
                             새 글 작성하기
                         </button>
                         <div class="space-y-4 pt-4">
@@ -79,18 +75,19 @@
         </div>
     </div>
 
+    <!-- Detail View: Fullscreen Post -->
     <div id="detail-view" class="view" style="background-color: var(--bg-color);">
         <div class="fixed top-4 left-4 z-10 flex items-center space-x-4">
             <button id="back-to-list-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                 <span>목록</span>
             </button>
-            <button id="edit-post-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors">
+            <button id="edit-post-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors admin-only">
                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
                 <span>수정</span>
             </button>
-             <button id="delete-post-btn" class="flex items-center space-x-2 bg-red-500/80 backdrop-blur-sm text-white px-4 py-2 rounded-full shadow-md hover:bg-red-500 transition-colors">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+             <button id="delete-post-btn" class="flex items-center space-x-2 bg-red-500/80 backdrop-blur-sm text-white px-4 py-2 rounded-full shadow-md hover:bg-red-500 transition-colors admin-only">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 <span>삭제</span>
             </button>
         </div>
@@ -104,6 +101,7 @@
         </div>
     </div>
     
+    <!-- Admin View -->
     <div id="admin-view" class="view">
         <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
             <h2 class="text-3xl font-bold mb-2" style="color: var(--heading-color);">블로그 설정</h2>
@@ -125,6 +123,7 @@
         </div>
     </div>
 
+    <!-- Post Modal (Editor) -->
     <div id="post-modal" class="fixed inset-0 bg-black/60 h-full w-full z-30 flex items-center justify-center p-4 hidden">
         <div class="w-full max-w-6xl shadow-2xl rounded-lg flex flex-col h-[90vh]" style="background-color: var(--card-bg-color);">
             <form id="post-form" class="flex flex-col h-full">
@@ -154,7 +153,7 @@
     
     <script type="module">
         document.addEventListener('DOMContentLoaded', async () => {
-            const { db, firebase } = window;
+            const { db, auth, firebase } = window;
             
             const setupDarkMode = () => {
                 if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -163,8 +162,7 @@
                     document.documentElement.classList.remove('dark');
                 }
             };
-            setupDarkMode();
-
+            
             const views = { main: document.getElementById('main-view'), detail: document.getElementById('detail-view'), admin: document.getElementById('admin-view') };
             const blogTitle = document.getElementById('blog-title');
             const blogDescription = document.getElementById('blog-description');
@@ -172,6 +170,7 @@
             const newPostBtn = document.getElementById('new-post-btn');
             const searchInput = document.getElementById('search-input');
             const tagsContainer = document.getElementById('tags-list');
+            const authContainer = document.getElementById('auth-container');
             
             const detailTitle = document.getElementById('detail-title');
             const detailMeta = document.getElementById('detail-meta');
@@ -199,22 +198,21 @@
             const toolbarButtons = [ { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>`, action: 'bold', title: '굵게' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>`, action: 'italic', title: '기울임' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h12v2H6zm8.12-3.29L18.83 9H16V7h6v6h-2V9.83l-4.71 4.71-1.42-1.42zM4 5h10v2H4z"/></svg>`, action: 'heading', title: '제목' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2V7H6v2zm4 0h2V7h-2v2zm4 0h2V7h-2v2z"/></svg>`, action: 'blockquote', title: '인용문' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>`, action: 'link', title: '링크' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`, action: 'image', title: '이미지' }, ];
             toolbarButtons.forEach(btn => { const button = document.createElement('button'); button.type = 'button'; button.className = 'p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700'; button.title = btn.title; button.innerHTML = btn.icon; button.addEventListener('click', () => handleToolbarClick(btn.action)); editorToolbar.appendChild(button); });
 
-            function handleToolbarClick(action) {
+            const handleToolbarClick = (action) => {
                 const textarea = postContentInput;
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
                 const selectedText = textarea.value.substring(start, end);
-                const insertText = (p, s) => { const replacement = p + selectedText + s; textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end); textarea.focus(); textarea.selectionStart = start + p.length; textarea.selectionEnd = start + p.length + selectedText.length; };
+                const applyMarkdown = (p, s) => { const replacement = p + selectedText + s; textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end); textarea.focus(); textarea.selectionStart = start + p.length; textarea.selectionEnd = start + p.length + selectedText.length; textarea.dispatchEvent(new Event('input')); };
                 switch(action) {
-                    case 'bold': insertText('**', '**'); break;
-                    case 'italic': insertText('*', '*'); break;
-                    case 'heading': insertText('\n### ', '\n'); break;
-                    case 'blockquote': insertText('\n> ', '\n'); break;
-                    case 'link': const url = prompt('URL을 입력하세요:', 'https://'); if(url) insertText('[', `](${url})`); break;
-                    case 'image': const imageUrl = prompt('이미지 URL을 입력하세요:', 'https://'); if(imageUrl) insertText(`\n![이미지 설명](${imageUrl})\n`, ''); break;
+                    case 'bold': applyMarkdown('**', '**'); break;
+                    case 'italic': applyMarkdown('*', '*'); break;
+                    case 'heading': applyMarkdown('\n### ', '\n'); break;
+                    case 'blockquote': applyMarkdown('\n> ', '\n'); break;
+                    case 'link': const url = prompt('URL을 입력하세요:', 'https://'); if(url) applyMarkdown('[', `](${url})`); break;
+                    case 'image': const imageUrl = prompt('이미지 URL을 입력하세요:', 'https://'); if(imageUrl) applyMarkdown(`\n![이미지 설명](${imageUrl})\n`, ''); break;
                 }
-                updatePreview();
-            }
+            };
             
             let posts = [];
             let currentFilter = { search: '', tag: '' };
@@ -230,14 +228,7 @@
                 try {
                     const q = firebase.query(postsCollection, firebase.orderBy("createdAt", "desc"));
                     const querySnapshot = await firebase.getDocs(q);
-                    posts = querySnapshot.docs.map(doc => {
-                        const data = doc.data();
-                        return { 
-                            id: doc.id, 
-                            ...data,
-                            createdAt: data.createdAt?.toDate() || new Date()
-                        };
-                    });
+                    posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt?.toDate() || new Date() }));
                 } catch (e) { console.error("게시물 로딩 실패:", e); alert("게시물을 불러오는데 실패했습니다. Firebase 설정을 확인해주세요."); }
             };
 
@@ -253,53 +244,69 @@
             };
 
             const saveSiteInfo = async () => {
+                if (!auth.currentUser) { alert("로그인이 필요합니다."); return; }
                 try {
-                    const newTitle = adminTitleInput.value;
-                    const newDescription = adminDescriptionInput.value;
-                    await firebase.setDoc(configDoc, { title: newTitle, description: newDescription });
+                    await firebase.setDoc(configDoc, { title: adminTitleInput.value, description: adminDescriptionInput.value });
                     loadSiteInfo();
                     alert("정보가 저장되었습니다.");
                     showView('main');
                 } catch (e) { console.error("사이트 정보 저장 실패:", e); }
             };
 
-            function render() { renderPosts(); renderTags(); }
-            function renderPosts() {
+            const render = () => { renderPosts(); renderTags(); }
+            const renderPosts = () => {
                 postsList.innerHTML = '';
-                let filteredPosts = posts.filter(p => {
-                    const searchMatch = !currentFilter.search || p.title.toLowerCase().includes(currentFilter.search.toLowerCase()) || p.content.toLowerCase().includes(currentFilter.search.toLowerCase());
-                    const tagMatch = !currentFilter.tag || p.tags.includes(currentFilter.tag);
-                    return searchMatch && tagMatch;
-                });
+                let filteredPosts = posts.filter(p => (!currentFilter.search || p.title.toLowerCase().includes(currentFilter.search.toLowerCase()) || p.content.toLowerCase().includes(currentFilter.search.toLowerCase())) && (!currentFilter.tag || (p.tags && p.tags.includes(currentFilter.tag))));
                 if (filteredPosts.length === 0) { postsList.innerHTML = `<li class="text-center py-10" style="color: var(--text-muted-color);">표시할 게시물이 없습니다.</li>`; return; }
                 filteredPosts.forEach(post => {
                     const listItem = document.createElement('li');
                     const excerpt = (post.content.replace(/<[^>]*>?/gm, '').replace(/[#*`>_~-]/g, '')).substring(0, 150) + '...';
-                    listItem.innerHTML = `<div class="group cursor-pointer p-6 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" data-id="${post.id}"><p class="text-sm" style="color: var(--text-muted-color);">${new Date(post.createdAt).toLocaleDateString('ko-KR')}</p><h2 class="text-2xl font-bold mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400" style="color: var(--heading-color);">${post.title}</h2><p class="mt-2 leading-relaxed">${excerpt}</p><div class="mt-4 flex flex-wrap gap-2">${post.tags.map(tag => `<span class="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">${tag}</span>`).join('')}</div></div>`;
+                    listItem.innerHTML = `<div class="group cursor-pointer p-6 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" data-id="${post.id}"><p class="text-sm" style="color: var(--text-muted-color);">${new Date(post.createdAt).toLocaleDateString('ko-KR')}</p><h2 class="text-2xl font-bold mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400" style="color: var(--heading-color);">${post.title}</h2><p class="mt-2 leading-relaxed">${excerpt}</p><div class="mt-4 flex flex-wrap gap-2">${(post.tags || []).map(tag => `<span class="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">${tag}</span>`).join('')}</div></div>`;
                     postsList.appendChild(listItem);
                 });
             }
-            function renderTags() {
-                const allTags = [...new Set(posts.flatMap(p => p.tags))];
+            const renderTags = () => {
+                const allTags = [...new Set(posts.flatMap(p => p.tags || []))];
                 tagsContainer.innerHTML = '';
                 const createTagButton = (tag, isAll = false) => { const button = document.createElement('button'); const isActive = (isAll && !currentFilter.tag) || (!isAll && currentFilter.tag === tag); button.className = `text-sm font-medium px-3 py-1 rounded-full transition-colors ${isActive ? 'bg-slate-800 text-white dark:bg-blue-600' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`; button.textContent = isAll ? '전체' : tag; button.onclick = () => { currentFilter.tag = isAll ? '' : tag; render(); }; return button; };
                 tagsContainer.appendChild(createTagButton(null, true));
                 allTags.forEach(tag => tagsContainer.appendChild(createTagButton(tag)));
             }
 
-            postsList.addEventListener('click', (e) => { const postElement = e.target.closest('.group'); if (postElement) showPostDetail(postElement.dataset.id); });
-            function showPostDetail(postId) {
+            const showPostDetail = (postId) => {
                 const post = posts.find(p => p.id == postId);
                 if (!post) return;
                 editPostBtn.dataset.id = postId;
                 deletePostBtn.dataset.id = postId;
                 detailTitle.textContent = post.title;
                 detailMeta.textContent = new Date(post.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-                detailTags.innerHTML = post.tags.map(tag => `<span class="text-sm font-medium bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full">${tag}</span>`).join('');
+                detailTags.innerHTML = (post.tags || []).map(tag => `<span class="text-sm font-medium bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full">${tag}</span>`).join('');
                 detailContent.innerHTML = converter.makeHtml(post.content);
                 showView('detail');
             }
             
+            const updateUiForAuthState = (user) => {
+                const adminElements = document.querySelectorAll('.admin-only');
+                const authContainer = document.getElementById('auth-container');
+                if (user) {
+                    adminElements.forEach(el => el.style.display = 'flex');
+                    authContainer.innerHTML = `<button id="logout-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">로그아웃</button>`;
+                    document.getElementById('logout-btn').addEventListener('click', () => firebase.signOut(auth));
+                } else {
+                    adminElements.forEach(el => el.style.display = 'none');
+                    authContainer.innerHTML = `<button id="login-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">GitHub 로그인</button>`;
+                    document.getElementById('login-btn').addEventListener('click', async () => {
+                        const provider = new firebase.GithubAuthProvider();
+                        try { await firebase.signInWithPopup(auth, provider); } catch (error) { console.error("로그인 실패:", error); }
+                    });
+                }
+            };
+
+            firebase.onAuthStateChanged(auth, (user) => {
+                updateUiForAuthState(user);
+            });
+
+            postsList.addEventListener('click', (e) => { const postElement = e.target.closest('.group'); if (postElement) showPostDetail(postElement.dataset.id); });
             backToListBtn.addEventListener('click', () => showView('main'));
             editPostBtn.addEventListener('click', (e) => {
                 editingPostId = e.currentTarget.dataset.id;
@@ -307,22 +314,19 @@
                 if (!post) return;
                 postTitleInput.value = post.title;
                 postContentInput.value = post.content;
-                postTagsInput.value = post.tags.join(', ');
+                postTagsInput.value = (post.tags || []).join(', ');
                 updatePreview();
                 postModal.classList.remove('hidden');
-            });
+});
             deletePostBtn.addEventListener('click', async (e) => {
                 const idToDelete = e.currentTarget.dataset.id;
-                if (confirm("정말로 이 게시물을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+                if (confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
                     try {
                         await firebase.deleteDoc(firebase.doc(db, "posts", idToDelete));
                         await loadData();
                         render();
                         showView('main');
-                    } catch (err) {
-                        console.error("삭제 실패:", err);
-                        alert("게시물을 삭제하는 데 실패했습니다.");
-                    }
+                    } catch (err) { console.error("삭제 실패:", err); }
                 }
             });
 
@@ -337,15 +341,11 @@
 
             postForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const postData = {
-                    title: postTitleInput.value,
-                    content: postContentInput.value,
-                    tags: postTagsInput.value.split(',').map(t => t.trim()).filter(Boolean)
-                };
+                if (!auth.currentUser) { alert("로그인이 필요합니다."); return; }
+                const postData = { title: postTitleInput.value, content: postContentInput.value, tags: postTagsInput.value.split(',').map(t => t.trim()).filter(Boolean) };
                 try {
                     if (editingPostId) {
-                        const postRef = firebase.doc(db, "posts", editingPostId);
-                        await firebase.updateDoc(postRef, postData);
+                        await firebase.updateDoc(firebase.doc(db, "posts", editingPostId), postData);
                     } else {
                         postData.createdAt = firebase.serverTimestamp();
                         await firebase.addDoc(postsCollection, postData);
@@ -353,17 +353,15 @@
                     await loadData();
                     render();
                     closePostModal();
-                } catch (err) {
-                    console.error("저장 실패: ", err);
-                    alert("게시물을 저장하는 데 실패했습니다.");
-                }
+                } catch (err) { console.error("저장 실패: ", err); }
             });
             
-            goToAdminBtn.addEventListener('click', () => showView('admin'));
+            goToAdminBtn.addEventListener('click', () => { if (auth.currentUser) showView('admin'); else alert("로그인이 필요합니다."); });
             adminCancelBtn.addEventListener('click', () => showView('main'));
             adminForm.addEventListener('submit', (e) => { e.preventDefault(); saveSiteInfo(); });
             
             const init = async () => {
+                setupDarkMode();
                 await loadSiteInfo();
                 await loadData();
                 render();
