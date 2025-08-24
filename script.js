@@ -1,44 +1,162 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const progressText = document.getElementById('progress-text');
-    const calendarGrid = document.getElementById('calendar-grid');
+/* Pretendard 폰트 및 기본 스타일 */
+body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f6f8fa;
+    color: #24292e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+}
 
-    // 1. 주요 날짜 계산
-    const now = new Date();
-    const year = now.getFullYear();
-    const startOfYear = new Date(year, 0, 1); // 올해의 첫 날
-    const endOfYear = new Date(year, 11, 31); // 올해의 마지막 날
+.container {
+    text-align: center;
+    background-color: #ffffff;
+    padding: 30px 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-width: 1000px;
+}
 
-    // 2. 올해가 총 며칠인지 계산 (윤년 고려)
-    const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-    const totalDaysInYear = isLeapYear ? 366 : 365;
+h1 { font-size: 2em; margin-bottom: 0.5em; }
+#progress-text { font-size: 1.2em; color: #586069; margin-bottom: 0.5em; }
+#completion-rate { font-size: 1.1em; color: #28a745; font-weight: bold; margin-bottom: 2em; }
 
-    // 3. 오늘이 올해의 몇 번째 날인지 계산
-    const dayOfYear = Math.floor((now - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+/* 캘린더 레이아웃 */
+.calendar-container {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
 
-    // 4. 남은 날짜 및 진행률 계산
-    const daysRemaining = totalDaysInYear - dayOfYear;
-    const percentagePassed = ((dayOfYear / totalDaysInYear) * 100).toFixed(2);
+.week-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10px;
+    color: #586069;
+    margin-top: 2px; /* 그리드와 정렬 맞추기 */
+}
 
-    // 5. 계산된 텍스트를 화면에 표시
-    progressText.textContent = `올해는 ${percentagePassed}% 지났고, ${daysRemaining}일 남았습니다.`;
+.week-labels > div {
+    height: 16px;
+    display: flex;
+    align-items: center;
+}
 
-    // 6. 잔디밭 그리드 생성
-    calendarGrid.innerHTML = ''; // 기존 내용을 비움
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr); /* 1행에 7개 */
+    grid-auto-rows: 16px;
+    gap: 4px;
+}
 
-    for (let i = 1; i <= totalDaysInYear; i++) {
-        const dayCell = document.createElement('div');
-        dayCell.classList.add('day');
+.day {
+    width: 16px;
+    height: 16px;
+    background-color: #ebedf0;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.1s ease-in-out;
+}
 
-        // 오늘 이전의 날짜는 'past' 클래스 추가
-        if (i < dayOfYear) {
-            dayCell.classList.add('past');
-        }
+.day:hover {
+    transform: scale(1.2);
+}
 
-        // 툴팁에 표시될 날짜 계산
-        const date = new Date(year, 0, i);
-        const dateString = date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-        dayCell.setAttribute('data-tooltip', dateString);
+.day.past { background-color: #9be9a8; }
+.day.level-2 { background-color: #40c463; }
+.day.level-3 { background-color: #30a14e; }
+.day.level-4 { background-color: #216e39; }
 
-        calendarGrid.appendChild(dayCell);
-    }
-});
+/* 오늘 날짜 하이라이트 */
+.day.today {
+    background-color: #ffc107; /* 노란색 배경 */
+    border: 1px solid #ff9800;
+    box-shadow: 0 0 8px 2px rgba(255, 193, 7, 0.7); /* Glow 효과 */
+}
+
+/* 목표 완료 스타일 */
+.day.goal-set .checkbox-icon { display: block; }
+.day.completed { background-color: #4863ad !important; }
+
+/* 목표 체크박스 (JS로 생성) */
+.checkbox-icon {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    color: white;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+/* 툴팁 */
+.day:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #24292e;
+    color: #ffffff;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+/* 팝업(모달) 스타일 */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.6);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 25px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 400px;
+    border-radius: 8px;
+    text-align: left;
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.modal-content h3 { margin-top: 0; }
+.modal-content textarea { width: 100%; height: 80px; margin: 10px 0; padding: 10px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
+.modal-content button {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+footer { margin-top: 2em; font-size: 0.9em; color: #6a737d; }
