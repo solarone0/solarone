@@ -1,646 +1,517 @@
 <!doctype html>
 <html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Daily Vision Tracker</title>
-    <!-- Tailwind CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <meta name="theme-color" content="#0ea5e9" />
-    <meta name="description" content="데일리 루틴 · 메모 · 장기 비전 진행률 트래커" />
-    <style>
-      /* 모바일 터치 피드백 개선 */
-      * { -webkit-tap-highlight-color: transparent; }
-      html, body, #root { height: 100%; }
-    </style>
-  </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="root" class="h-full"></div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily Vision Tracker</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Core Libraries: React and ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- UI Libraries that depend on React -->
+  <script src="https://unpkg.com/lucide-react@0.378.0/dist/umd/lucide-react.js"></script>
+  
+  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="description" content="데일리 루틴 · 메모 · 장기 비전 진행률 트래커" />
+  <style>
+    /* Basic styling for better mobile experience */
+    * { -webkit-tap-highlight-color: transparent; }
+    html, body, #root { height: 100%; }
+    /* Simple animation for modal */
+    .modal-enter { opacity: 0; transform: scale(0.95); }
+    .modal-enter-active { opacity: 1; transform: scale(1); transition: opacity 200ms, transform 200ms; }
+    .modal-exit { opacity: 1; transform: scale(1); }
+    .modal-exit-active { opacity: 0; transform: scale(0.95); transition: opacity 200ms, transform 200ms; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+  <div id="root" class="h-full"></div>
 
-    <!-- React & Babel (브라우저에서 바로 JSX 실행) -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <!-- Application logic script -->
+  <script type="text/babel" data-presets="react">
+    const { useEffect, useMemo, useRef, useState, useCallback, Fragment } = React;
+    // Lucide icons are available on the global `lucide` object
+    const { X, Plus, Edit, Trash2, Check, ChevronDown, Calendar, Target, Repeat, Book, BarChart2, AlertTriangle } = lucide;
 
-    <script type="text/babel">
-      const { useEffect, useMemo, useRef, useState } = React;
-
-      /***********************************
-       * 유틸
-       ***********************************/
-      const uid = () => Math.random().toString(36).slice(2, 10);
-      const todayStr = (d=new Date()) => d.toISOString().slice(0,10); // YYYY-MM-DD
-      const weekday = (d=new Date()) => d.getDay(); // 0~6 (일~토)
-      const WEEKDAYS = ['일','월','화','수','목','금','토'];
-
-      const clamp = (v, min=0, max=100) => Math.min(max, Math.max(min, v));
-
-      const formatDateK = (iso) => {
-        try {
-          const d = new Date(iso);
-          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        } catch { return iso; }
+    /***********************************
+     * Utils
+     ***********************************/
+    const uid = () => Math.random().toString(36).slice(2, 10);
+    const todayStr = (d = new Date()) => d.toISOString().slice(0, 10); // YYYY-MM-DD
+    const weekday = (d = new Date()) => d.getDay(); // 0~6 (Sun~Sat)
+    const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+    const clamp = (v, min = 0, max = 100) => Math.min(max, Math.max(min, v));
+    const formatDateK = (iso) => {
+      try {
+        const d = new Date(iso);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        return iso; 
       }
+    };
 
-      /***********************************
-       * 로컬 스토리지 (간단 퍼시스턴스)
-       ***********************************/
-      const STORAGE_KEY = 'dvt_v1_state';
-      const loadState = () => {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (!raw) return null;
-          return JSON.parse(raw);
-        } catch { return null; }
+    /***********************************
+     * Local Storage (for data persistence)
+     ***********************************/
+    const STORAGE_KEY = 'dvt_v2_state';
+    const loadState = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (error) {
+        console.error("Failed to load state from localStorage", error);
+        return null;
       }
-      const saveState = (state) => {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    };
+    const saveState = (state) => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (error) {
+        console.error("Failed to save state to localStorage", error);
       }
+    };
 
-      /***********************************
-       * 기본 상태 구조
-       ***********************************/
-      const defaultState = {
-        routines: [
-          // { id, title, schedule: {type:'days'|'perWeek', days:[0..6], perWeek:3}, color, createdAt }
-        ],
-        checkins: {
-          // 'YYYY-MM-DD': { [routineId]: true }
-        },
-        notes: {
-          // 'YYYY-MM-DD': '메모 내용'
-        },
-        goals: [
-          // { id, title, targetDate:'YYYY-MM-DD', milestones:[{id,title,weight(0-100),type:'manual'|'linked', routineId?, progress(0-100)}] }
-        ],
-        createdAt: todayStr(),
-      };
+    /***********************************
+     * Default State Structure
+     ***********************************/
+    const defaultState = {
+      routines: [],
+      checkins: {},
+      notes: {},
+      goals: [],
+      createdAt: todayStr(),
+    };
 
-      /***********************************
-       * 진행률 계산 도우미
-       ***********************************/
-      function isRoutineScheduledToday(routine, date = new Date()) {
-        if (!routine?.schedule) return true;
-        const w = weekday(date);
-        if (routine.schedule.type === 'days') return routine.schedule.days?.includes(w);
-        if (routine.schedule.type === 'perWeek') {
-          // 그 주에 perWeek 횟수 목표: 보기 편하게 오늘 포함 주(월~일)에서 체크인 남은 횟수 등으로 판단하지 않고, 오늘은 항상 표시
-          return true;
-        }
-        return true;
+    /***********************************
+     * Progress Calculation Helpers
+     ***********************************/
+    function isRoutineScheduledToday(routine, date = new Date()) {
+      if (!routine || !routine.schedule) return true;
+      const w = weekday(date);
+      if (routine.schedule.type === 'days') {
+        return routine.schedule.days && routine.schedule.days.includes(w);
       }
+      if (routine.schedule.type === 'perWeek') return true;
+      return true;
+    }
 
-      function startOfWeek(d) {
-        const x = new Date(d);
-        const w = x.getDay();
-        const diff = (w+6) % 7; // 월(1) 시작 기준: 일(0) -> 6
-        x.setDate(x.getDate() - diff);
-        x.setHours(0,0,0,0);
-        return x;
-      }
-      function endOfWeek(d) {
-        const s = startOfWeek(d);
-        const e = new Date(s); e.setDate(s.getDate()+6); e.setHours(23,59,59,999); return e;
-      }
+    function startOfWeek(d) {
+      const x = new Date(d);
+      const day = x.getDay();
+      const diff = x.getDate() - day + (day === 0 ? -6 : 1); // Adjust to make Monday the start
+      return new Date(x.setDate(diff));
+    }
 
-      function getRoutineWeeklyCompletion(state, routineId, endDate = new Date(), weeks=4) {
-        // 최근 N주 평균 완료율 (perWeek는 목표 대비 완료율, days는 요일 스케줄 대비 완료율)
-        const r = state.routines.find(r=>r.id===routineId);
-        if (!r) return 0;
-        const weeksArr = [];
-        let end = endOfWeek(endDate);
-        for (let i=0;i<weeks;i++) {
-          const s = startOfWeek(end);
-          let planned = 0; let done = 0;
-          for (let d=new Date(s); d<=end; d.setDate(d.getDate()+1)) {
+    function getRoutineWeeklyCompletion(state, routineId, endDate = new Date(), weeks = 4) {
+      const r = state.routines.find(function(r) { return r.id === routineId });
+      if (!r) return 0;
+
+      let totalPercentage = 0;
+      for (let i = 0; i < weeks; i++) {
+        const weekEndDate = new Date(endDate);
+        weekEndDate.setDate(weekEndDate.getDate() - (i * 7));
+        const weekStartDate = startOfWeek(weekEndDate);
+
+        let planned = 0;
+        let done = 0;
+        
+        if (r.schedule && r.schedule.type === 'days') {
+          for (let d = new Date(weekStartDate); d <= weekEndDate; d.setDate(d.getDate() + 1)) {
+            if (r.schedule.days && r.schedule.days.includes(weekday(d))) {
+              planned++;
+              const iso = todayStr(d);
+              if (state.checkins[iso] && state.checkins[iso][r.id]) {
+                done++;
+              }
+            }
+          }
+        } else if (r.schedule && r.schedule.type === 'perWeek') {
+          planned = r.schedule.perWeek || 0;
+          for (let d = new Date(weekStartDate); d <= weekEndDate; d.setDate(d.getDate() + 1)) {
             const iso = todayStr(d);
-            const ci = state.checkins[iso] || {};
-            if (r.schedule?.type === 'days') {
-              const should = r.schedule.days?.includes(weekday(d));
-              if (should) planned += 1;
-              if (ci[r.id]) done += 1;
-            } else if (r.schedule?.type === 'perWeek') {
-              // perWeek는 주 단위 목표치
-              planned = r.schedule.perWeek || 0; // 주간 목표
-              // 완료는 그 주 동안 체크인 횟수 합계(중복 허용)
-              done = 0;
-              for (let d2=new Date(s); d2<=end; d2.setDate(d2.getDate()+1)) {
-                const iso2 = todayStr(d2);
-                const ci2 = state.checkins[iso2] || {};
-                if (ci2[r.id]) done += 1;
-              }
-              break; // 이 주는 계산 끝
-            } else {
-              // 스케줄 없으면 오늘 체크되면 완료
-              planned += 1; if (ci[r.id]) done += 1;
+            if (state.checkins[iso] && state.checkins[iso][r.id]) {
+              done++;
             }
           }
-          const pct = planned>0 ? (done/planned)*100 : (done>0?100:0);
-          weeksArr.push(pct);
-          end = new Date(s); end.setDate(end.getDate()-1);
+        } else { // No schedule
+          planned = 7; // Assume daily
+          for (let d = new Date(weekStartDate); d <= weekEndDate; d.setDate(d.getDate() + 1)) {
+            const iso = todayStr(d);
+            if (state.checkins[iso] && state.checkins[iso][r.id]) {
+              done++;
+            }
+          }
         }
-        return weeksArr.length? weeksArr.reduce((a,b)=>a+b,0)/weeksArr.length : 0;
+        const weekPercentage = planned > 0 ? (done / planned) * 100 : (done > 0 ? 100 : 0);
+        totalPercentage += weekPercentage;
       }
 
-      function computeGoalProgress(state, goal) {
-        if (!goal?.milestones?.length) return 0;
-        let sumW = 0, acc = 0;
-        for (const m of goal.milestones) {
-          const w = clamp(m.weight||0, 0, 100);
-          sumW += w;
-          let p = 0;
-          if (m.type === 'linked' && m.routineId) {
-            p = getRoutineWeeklyCompletion(state, m.routineId, new Date(), 4);
-          } else {
-            p = clamp(m.progress||0, 0, 100);
-          }
-          acc += w * p / 100;
+      return clamp(totalPercentage / weeks);
+    }
+
+    function computeGoalProgress(state, goal) {
+      if (!goal || !goal.milestones || !goal.milestones.length) return 0;
+      let totalWeight = 0, weightedProgress = 0;
+      for (const m of goal.milestones) {
+        const weight = clamp(m.weight || 0, 0, 100);
+        totalWeight += weight;
+        let progress = 0;
+        if (m.type === 'linked' && m.routineId) {
+          progress = getRoutineWeeklyCompletion(state, m.routineId, new Date(), 4);
+        } else {
+          progress = clamp(m.progress || 0, 0, 100);
         }
-        if (sumW === 0) return 0;
-        return clamp(acc / sumW * 100, 0, 100);
+        weightedProgress += weight * (progress / 100);
       }
+      if (totalWeight === 0) return 0;
+      return clamp((weightedProgress / totalWeight) * 100);
+    }
 
-      /***********************************
-       * 공통 UI 컴포넌트
-       ***********************************/
-      const Card = ({children, className=''}) => (
-        <div className={`rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 ${className}`}>{children}</div>
-      );
-      const CardHeader = ({title, children, className=''}) => (
-        <div className={`flex items-center justify-between border-b border-slate-100 px-4 py-3 ${className}`}>
-          <h3 className="font-semibold text-slate-800">{title}</h3>
-          <div>{children}</div>
+    /***********************************
+     * Common UI Components
+     ***********************************/
+    const Card = ({ children, className = '' }) => <div className={`rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/50 ${className}`}>{children}</div>;
+    const CardHeader = ({ title, children, className = '' }) => (
+      <div className={`flex items-center justify-between border-b border-slate-100 px-4 py-3 ${className}`}>
+        <h3 className="font-semibold text-slate-800 text-lg">{title}</h3>
+        <div>{children}</div>
+      </div>
+    );
+    const CardBody = ({ children, className = '' }) => <div className={`p-4 ${className}`}>{children}</div>;
+    const Button = ({ children, onClick, className = '', type = 'button', Icon, disabled=false }) => (
+      <button type={type} onClick={onClick} disabled={disabled} className={`active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold bg-sky-600 text-white hover:bg-sky-700 transition-colors ${className}`}>
+        {Icon && <Icon size={16} />}
+        {children}
+      </button>
+    );
+    const GhostBtn = ({ children, onClick, className = '', type = 'button', Icon, disabled=false }) => (
+      <button type={type} onClick={onClick} disabled={disabled} className={`active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-transparent text-slate-600 hover:bg-slate-100 transition-colors ${className}`}>
+        {Icon && <Icon size={16} />}
+        {children}
+      </button>
+    );
+    const Input = React.forwardRef((props, ref) => <input ref={ref} {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 transition ${props.className || ''}`} />);
+    const Textarea = React.forwardRef((props, ref) => <textarea ref={ref} {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 transition ${props.className || ''}`}></textarea>);
+    const Select = React.forwardRef((props, ref) => <select ref={ref} {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white appearance-none ${props.className || ''}`}></select>);
+    const Progress = ({ value }) => (
+      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+        <div className="h-full bg-sky-500 transition-all duration-300" style={{ width: `${clamp(value)}%` }}></div>
+      </div>
+    );
+    const Modal = ({ isOpen, onClose, title, children }) => {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md modal-enter-active" onClick={function(e) { e.stopPropagation() }}>
+            <header className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h2 className="text-lg font-bold">{title}</h2>
+              <GhostBtn onClick={onClose} Icon={X} className="!p-2" />
+            </header>
+            <div className="p-4">{children}</div>
+          </div>
         </div>
       );
-      const CardBody = ({children, className=''}) => (
-        <div className={`p-4 ${className}`}>{children}</div>
-      );
+    };
 
-      const Pill = ({children}) => (
-        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-slate-200 text-slate-600">{children}</span>
-      );
+    const ConfirmationModal = ({ modalConfig, onConfirm, onCancel }) => {
+        if (!modalConfig.isOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm modal-enter-active p-6 text-center" onClick={function(e) { e.stopPropagation() }}>
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                        <AlertTriangle className="h-6 w-6 text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold mt-4 text-slate-800">{modalConfig.title}</h3>
+                    <p className="text-sm text-slate-500 mt-2">{modalConfig.message}</p>
+                    <div className="mt-6 flex justify-center gap-3">
+                        <GhostBtn onClick={onCancel} className="flex-1 justify-center">취소</GhostBtn>
+                        <Button onClick={onConfirm} className="flex-1 justify-center bg-red-600 hover:bg-red-700">확인</Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
-      const Button = ({children, onClick, className='', type='button'}) => (
-        <button type={type} onClick={onClick} className={`active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 ${className}`}>{children}</button>
-      );
+    /***********************************
+     * Forms
+     ***********************************/
+    const RoutineForm = ({ routine, onSave, onCancel }) => {
+        const [title, setTitle] = useState(routine ? routine.title : '');
+        const [color, setColor] = useState(routine ? routine.color : '#38bdf8');
+        const [scheduleType, setScheduleType] = useState((routine && routine.schedule) ? routine.schedule.type : 'days');
+        const [days, setDays] = useState((routine && routine.schedule && routine.schedule.days) ? routine.schedule.days : [1, 2, 3, 4, 5]);
+        const [perWeek, setPerWeek] = useState((routine && routine.schedule && routine.schedule.perWeek) ? routine.schedule.perWeek : 3);
 
-      const GhostBtn = ({children, onClick, className='', type='button'}) => (
-        <button type={type} onClick={onClick} className={`inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-transparent text-slate-600 hover:bg-slate-100 ${className}`}>{children}</button>
-      );
+        const handleDayToggle = (day) => {
+            setDays(function(prev) { return prev.includes(day) ? prev.filter(function(d) { return d !== day }) : [...prev, day].sort() });
+        };
 
-      const Input = (props) => (<input {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 ${props.className||''}`} />);
-      const Textarea = (props) => (<textarea {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 ${props.className||''}`}></textarea>);
-      const Select = (props) => (<select {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white ${props.className||''}`}></select>);
-
-      const Progress = ({value}) => (
-        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-sky-500" style={{width: `${clamp(value)}%`}}></div>
-        </div>
-      );
-
-      /***********************************
-       * 메인 앱
-       ***********************************/
-      function App(){
-        const [state, setState] = useState(() => loadState() || defaultState);
-        const [tab, setTab] = useState('today');
-        const [date, setDate] = useState(todayStr());
-
-        useEffect(()=>{ saveState(state); }, [state]);
-
-        // 오늘 표시용
-        const todayCheckins = state.checkins[date] || {};
-
-        const scheduledRoutines = useMemo(()=> state.routines.filter(r=>isRoutineScheduledToday(r, new Date(date))), [state.routines, date]);
-
-        const todaysProgress = useMemo(()=>{
-          if (!scheduledRoutines.length) return 0;
-          const done = scheduledRoutines.filter(r => todayCheckins[r.id]).length;
-          return Math.round(done / scheduledRoutines.length * 100);
-        }, [scheduledRoutines, todayCheckins]);
-
-        const goalsWithProgress = useMemo(()=> state.goals.map(g=>({ ...g, _progress: Math.round(computeGoalProgress(state, g)) })), [state]);
-
-        // 액션
-        const toggleCheckin = (rid) => {
-          setState(prev=>{
-            const day = prev.checkins[date] ? {...prev.checkins[date]} : {};
-            day[rid] = !day[rid];
-            return { ...prev, checkins: { ...prev.checkins, [date]: day } };
-          });
-        }
-
-        const upsertRoutine = (draft) => {
-          setState(prev=>{
-            if (draft.id) {
-              return { ...prev, routines: prev.routines.map(r => r.id===draft.id? {...r, ...draft}: r) };
-            } else {
-              const r = { id: uid(), title: draft.title||'새 루틴', schedule: draft.schedule||{type:'days', days:[1,2,3,4,5]}, color: draft.color||'#38bdf8', createdAt: todayStr() };
-              return { ...prev, routines: [...prev.routines, r] };
-            }
-          })
-        }
-
-        const deleteRoutine = (rid) => {
-          setState(prev=>({
-            ...prev,
-            routines: prev.routines.filter(r=>r.id!==rid),
-            // 체크인도 함께 정리(보존하려면 이 부분 제거)
-            checkins: Object.fromEntries(Object.entries(prev.checkins).map(([k,v])=>[k, Object.fromEntries(Object.entries(v).filter(([id])=>id!==rid))]))
-          }))
-        }
-
-        const setNote = (text) => setState(prev=>({ ...prev, notes: { ...prev.notes, [date]: text } }));
-
-        const upsertGoal = (draft) => {
-          setState(prev=>{
-            if (draft.id) {
-              return { ...prev, goals: prev.goals.map(g=>g.id===draft.id? {...g, ...draft}: g) };
-            } else {
-              const g = { id: uid(), title: draft.title||'새 목표', targetDate: draft.targetDate||todayStr(), milestones: draft.milestones||[] };
-              return { ...prev, goals: [...prev.goals, g] };
-            }
-          })
-        }
-        const deleteGoal = (gid) => setState(prev=>({ ...prev, goals: prev.goals.filter(g=>g.id!==gid) }));
-
-        const upsertMilestone = (gid, mDraft) => {
-          setState(prev=>{
-            const goals = prev.goals.map(g=>{
-              if (g.id!==gid) return g;
-              const ms = g.milestones || [];
-              if (mDraft.id) {
-                return { ...g, milestones: ms.map(m=>m.id===mDraft.id? {...m, ...mDraft}: m) };
-              } else {
-                const m = { id: uid(), title: mDraft.title||'새 마일스톤', weight: clamp(mDraft.weight||0), type: mDraft.type||'manual', routineId: mDraft.routineId||null, progress: clamp(mDraft.progress||0) };
-                return { ...g, milestones: [...ms, m] };
-              }
-            })
-            return { ...prev, goals };
-          })
-        }
-        const deleteMilestone = (gid, mid) => setState(prev=>({
-          ...prev,
-          goals: prev.goals.map(g=> g.id===gid? { ...g, milestones: (g.milestones||[]).filter(m=>m.id!==mid) }: g )
-        }));
-
-        const exportJson = () => {
-          const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = `dvt-backup-${todayStr()}.json`; a.click();
-          URL.revokeObjectURL(url);
-        }
-        const importJson = (file) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            try {
-              const data = JSON.parse(e.target.result);
-              setState(data); alert('가져오기 완료');
-            } catch(err){ alert('가져오기 실패: ' + err.message); }
-          }
-          reader.readAsText(file);
-        }
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!title) return;
+            const schedule = scheduleType === 'days' ? { type: 'days', days: days } : { type: 'perWeek', perWeek: Number(perWeek) };
+            onSave({ id: routine ? routine.id : undefined, title: title, color: color, schedule: schedule });
+        };
 
         return (
-          <div className="mx-auto max-w-3xl h-full flex flex-col">
-            {/* 헤더 */}
-            <header className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur border-b border-slate-200">
-              <div className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl bg-sky-500 grid place-items-center text-white font-bold">D</div>
-                  <div>
-                    <div className="text-sm text-slate-500">Daily Vision Tracker</div>
-                    <div className="font-semibold">오늘의 나를 쌓아 비전으로</div>
-                  </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-slate-700">루틴 이름</label>
+                    <Input type="text" value={title} onChange={function(e) { setTitle(e.target.value) }} placeholder="예: 아침 조깅" required />
                 </div>
-                <div className="flex items-center gap-2">
-                  <GhostBtn onClick={exportJson}>백업</GhostBtn>
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files?.[0] && importJson(e.target.files[0])} />
-                    <span className="inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-transparent text-slate-600 hover:bg-slate-100">가져오기</span>
-                  </label>
+                <div>
+                    <label className="text-sm font-medium text-slate-700">색상</label>
+                    <div className="flex items-center gap-2">
+                        <input type="color" value={color} onChange={function(e) { setColor(e.target.value) }} className="w-10 h-10 rounded-lg p-1 border border-slate-300" />
+                        <Input type="text" value={color} onChange={function(e) { setColor(e.target.value) }} />
+                    </div>
                 </div>
-              </div>
-              {/* 탭 */}
-              <nav className="px-2 pb-2 grid grid-cols-4 gap-2">
-                {[
-                  {id:'today', label:'오늘'},
-                  {id:'routines', label:'루틴'},
-                  {id:'goals', label:'비전/목표'},
-                  {id:'report', label:'리포트'},
-                ].map(t => (
-                  <button key={t.id} onClick={()=>setTab(t.id)} className={`rounded-xl px-3 py-2 text-sm font-medium ${tab===t.id? 'bg-sky-600 text-white':'bg-white text-slate-700 border border-slate-200'}`}>{t.label}</button>
-                ))}
-              </nav>
-            </header>
-
-            {/* 본문 */}
-            <main className="flex-1 overflow-y-auto p-4 space-y-4">
-              {tab==='today' && (
-                <>
-                  <Card>
-                    <CardHeader title="오늘 루틴">
-                      <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="rounded-xl border px-2 py-1 text-sm border-slate-200" />
-                    </CardHeader>
-                    <CardBody>
-                      {scheduledRoutines.length===0 ? (
-                        <div className="text-slate-500 text-sm">오늘 예정된 루틴이 없습니다. 루틴 탭에서 추가해보세요.</div>
-                      ) : (
-                        <ul className="space-y-2">
-                          {scheduledRoutines.map(r=> (
-                            <li key={r.id} className="flex items-center gap-3">
-                              <input id={`r-${r.id}`} type="checkbox" checked={!!todayCheckins[r.id]} onChange={()=>toggleCheckin(r.id)} className="h-5 w-5" />
-                              <label htmlFor={`r-${r.id}`} className="flex-1">
-                                <div className="font-medium">{r.title}</div>
-                                <div className="text-xs text-slate-500">
-                                  {r.schedule?.type==='days' && <span>요일 지정: {r.schedule.days.map(d=>WEEKDAYS[d]).join(', ')}</span>}
-                                  {r.schedule?.type==='perWeek' && <span>주 {r.schedule.perWeek}회</span>}
-                                </div>
-                              </label>
-                              <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
-                              <GhostBtn onClick={()=>{
-                                const title = prompt('루틴 이름 수정', r.title)||r.title;
-                                const type = prompt('스케줄 타입 (days|perWeek)', r.schedule?.type||'days')||r.schedule?.type||'days';
-                                let schedule = {type};
-                                if (type==='days') {
-                                  const daysStr = prompt('요일(0=일~6=토), 콤마구분', (r.schedule.days||[1,2,3,4,5]).join(','))||'';
-                                  schedule.days = daysStr.split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
-                                } else {
-                                  const perWeek = parseInt(prompt('주당 횟수', r.schedule.perWeek||3)||'3')||3;
-                                  schedule.perWeek = perWeek;
-                                }
-                                const color = prompt('색상(hex)', r.color||'#38bdf8')||r.color||'#38bdf8';
-                                upsertRoutine({ ...r, title, schedule, color });
-                              }}>편집</GhostBtn>
-                              <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteRoutine(r.id); }}>삭제</GhostBtn>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="mt-4 flex items-center justify-between">
-                        <div className="flex-1 mr-4">
-                          <Progress value={todaysProgress} />
-                          <div className="mt-1 text-xs text-slate-500">오늘 진행률 {todaysProgress}%</div>
+                <div>
+                    <label className="text-sm font-medium text-slate-700">스케줄</label>
+                    <Select value={scheduleType} onChange={function(e) { setScheduleType(e.target.value) }}>
+                        <option value="days">요일 지정</option>
+                        <option value="perWeek">주 N회</option>
+                    </Select>
+                </div>
+                {scheduleType === 'days' && (
+                    <div>
+                        <div className="grid grid-cols-7 gap-2">
+                            {WEEKDAYS.map(function(label, index) { return (
+                                <button type="button" key={index} onClick={function() { handleDayToggle(index) }} className={`p-2 rounded-lg text-sm border ${days.includes(index) ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-700 border-slate-300'}`}>
+                                    {label}
+                                </button>
+                            )})}
                         </div>
-                        <Button onClick={()=>{
-                          const title = prompt('루틴 이름','물 2컵 마시기');
-                          if (!title) return;
-                          const type = prompt('스케줄 타입 (days|perWeek)','days');
-                          let schedule = {type};
-                          if (type==='days') {
-                            const daysStr = prompt('요일(0=일~6=토), 콤마구분','1,2,3,4,5');
-                            schedule.days = (daysStr||'').split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
-                          } else {
-                            const perWeek = parseInt(prompt('주당 횟수','3'))||3;
-                            schedule.perWeek = perWeek;
-                          }
-                          const color = prompt('색상(hex)', '#38bdf8')||'#38bdf8';
-                          upsertRoutine({ title, schedule, color });
-                        }}>루틴 추가</Button>
-                      </div>
-                    </CardBody>
-                  </Card>
-
-                  <Card>
-                    <CardHeader title="오늘 메모" />
-                    <CardBody>
-                      <Textarea rows={5} placeholder="오늘의 생각/기록을 남겨보세요" value={state.notes[date]||''} onChange={(e)=>setNote(e.target.value)} />
-                      <div className="mt-2 text-xs text-slate-500">날짜별로 자동 저장됩니다.</div>
-                    </CardBody>
-                  </Card>
-                </>
-              )}
-
-              {tab==='routines' && (
-                <>
-                  <Card>
-                    <CardHeader title="루틴 목록">
-                      <Button onClick={()=>{
-                        const title = prompt('루틴 이름','아침 스트레칭');
-                        if (!title) return;
-                        const type = prompt('스케줄 타입 (days|perWeek)','days');
-                        let schedule = {type};
-                        if (type==='days') {
-                          const daysStr = prompt('요일(0=일~6=토), 콤마구분','1,2,3,4,5');
-                          schedule.days = (daysStr||'').split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
-                        } else {
-                          const perWeek = parseInt(prompt('주당 횟수','3'))||3;
-                          schedule.perWeek = perWeek;
-                        }
-                        const color = prompt('색상(hex)', '#34d399')||'#34d399';
-                        upsertRoutine({ title, schedule, color });
-                      }}>추가</Button>
-                    </CardHeader>
-                    <CardBody>
-                      {state.routines.length===0 ? (
-                        <div className="text-sm text-slate-500">아직 루틴이 없습니다. 상단의 추가 버튼으로 만들어보세요.</div>
-                      ) : (
-                        <ul className="space-y-3">
-                          {state.routines.map(r => (
-                            <li key={r.id} className="rounded-xl border border-slate-200 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                  <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
-                                  <div>
-                                    <div className="font-medium">{r.title}</div>
-                                    <div className="text-xs text-slate-500">{r.schedule?.type==='days' ? `요일: ${r.schedule.days.map(d=>WEEKDAYS[d]).join(', ')}` : `주 ${r.schedule.perWeek}회`}</div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <GhostBtn onClick={()=>{
-                                    const title = prompt('루틴 이름 수정', r.title)||r.title;
-                                    const type = prompt('스케줄 타입 (days|perWeek)', r.schedule?.type||'days')||r.schedule?.type||'days';
-                                    let schedule = {type};
-                                    if (type==='days') {
-                                      const daysStr = prompt('요일(0=일~6=토), 콤마구분', (r.schedule.days||[1,2,3,4,5]).join(','))||'';
-                                      schedule.days = daysStr.split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
-                                    } else {
-                                      const perWeek = parseInt(prompt('주당 횟수', r.schedule.perWeek||3)||'3')||3;
-                                      schedule.perWeek = perWeek;
-                                    }
-                                    const color = prompt('색상(hex)', r.color||'#38bdf8')||r.color||'#38bdf8';
-                                    upsertRoutine({ ...r, title, schedule, color });
-                                  }}>편집</GhostBtn>
-                                  <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteRoutine(r.id); }}>삭제</GhostBtn>
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </CardBody>
-                  </Card>
-                </>
-              )}
-
-              {tab==='goals' && (
-                <>
-                  <Card>
-                    <CardHeader title="비전/장기 목표">
-                      <Button onClick={()=>{
-                        const title = prompt('목표 제목','5개년 재정 독립 기반 만들기');
-                        if (!title) return;
-                        const targetDate = prompt('목표 완료 예정일 (YYYY-MM-DD)', todayStr());
-                        upsertGoal({ title, targetDate, milestones: [] });
-                      }}>목표 추가</Button>
-                    </CardHeader>
-                    <CardBody>
-                      {goalsWithProgress.length===0 ? (
-                        <div className="text-sm text-slate-500">아직 목표가 없습니다. 상단의 목표 추가 버튼을 눌러보세요.</div>
-                      ) : (
-                        <ul className="space-y-4">
-                          {goalsWithProgress.map(g=> (
-                            <li key={g.id} className="rounded-xl border border-slate-200">
-                              <div className="p-3 flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="font-semibold truncate">{g.title}</div>
-                                  <div className="text-xs text-slate-500">목표일: {formatDateK(g.targetDate)} · 진행률 {g._progress}%</div>
-                                </div>
-                                <div className="w-40"><Progress value={g._progress} /></div>
-                                <div className="flex items-center gap-2">
-                                  <GhostBtn onClick={()=>{
-                                    const title = prompt('목표 제목 수정', g.title)||g.title;
-                                    const targetDate = prompt('목표일 (YYYY-MM-DD)', g.targetDate)||g.targetDate;
-                                    upsertGoal({ ...g, title, targetDate });
-                                  }}>편집</GhostBtn>
-                                  <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteGoal(g.id); }}>삭제</GhostBtn>
-                                </div>
-                              </div>
-                              <div className="border-t border-slate-100 p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-sm font-medium">마일스톤</div>
-                                  <Button className="bg-slate-800 hover:bg-slate-900" onClick={()=>{
-                                    const title = prompt('마일스톤 제목','루틴 기반 건강 습관 확립');
-                                    if (!title) return;
-                                    const weight = clamp(parseInt(prompt('가중치(0~100)','25')||'25'));
-                                    const type = prompt('타입(manual|linked)','manual');
-                                    let mDraft = { title, weight, type };
-                                    if (type==='linked') {
-                                      const rId = prompt('연결할 루틴 ID (루틴 탭에서 찾을 수 있음)\n\n참고: 아래 드롭다운에서 선택하는 방식은 차후 업데이트 예정입니다.');
-                                      if (rId) mDraft.routineId = rId;
-                                    } else {
-                                      mDraft.progress = clamp(parseInt(prompt('현재 진행률(0~100)','0')||'0'));
-                                    }
-                                    upsertMilestone(g.id, mDraft);
-                                  }}>마일스톤 추가</Button>
-                                </div>
-                                {(g.milestones||[]).length===0 ? (
-                                  <div className="text-sm text-slate-500">마일스톤이 없습니다. 추가해보세요.</div>
-                                ) : (
-                                  <ul className="space-y-2">
-                                    {g.milestones.map(m=> (
-                                      <li key={m.id} className="rounded-lg border border-slate-200 p-2">
-                                        <div className="flex items-center justify-between gap-3">
-                                          <div className="min-w-0">
-                                            <div className="font-medium truncate">{m.title} <span className="ml-2 text-xs text-slate-500">가중치 {m.weight}% · {m.type==='linked'? '루틴 연동' : '수동'}</span></div>
-                                            {m.type==='linked' && m.routineId && (
-                                              <div className="text-xs text-slate-500">연결 루틴 ID: {m.routineId} · 최근 4주 평균 완료율이 진행률로 반영됩니다.</div>
-                                            )}
-                                          </div>
-                                          <div className="w-32">
-                                            <Progress value={m.type==='linked' && m.routineId ? getRoutineWeeklyCompletion(state, m.routineId) : clamp(m.progress||0)} />
-                                          </div>
-                                        </div>
-                                        <div className="mt-2 flex items-center gap-2">
-                                          {m.type==='manual' && (
-                                            <>
-                                              <input type="range" min="0" max="100" value={m.progress||0} onChange={(e)=> upsertMilestone(g.id, { ...m, progress: parseInt(e.target.value) })} className="w-full" />
-                                              <span className="text-xs w-10 text-right">{m.progress||0}%</span>
-                                            </>
-                                          )}
-                                          <GhostBtn onClick={()=>{
-                                            const title = prompt('마일스톤 제목', m.title)||m.title;
-                                            const weight = clamp(parseInt(prompt('가중치(0~100)', String(m.weight))||String(m.weight)));
-                                            let mDraft = { ...m, title, weight };
-                                            if (m.type==='linked') {
-                                              const routineId = prompt('연결 루틴 ID', m.routineId||'')||m.routineId||'';
-                                              mDraft.routineId = routineId;
-                                            } else {
-                                              const progress = clamp(parseInt(prompt('진행률(0~100)', String(m.progress||0))||String(m.progress||0)));
-                                              mDraft.progress = progress;
-                                            }
-                                            upsertMilestone(g.id, mDraft);
-                                          }}>편집</GhostBtn>
-                                          <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteMilestone(g.id, m.id); }}>삭제</GhostBtn>
-                                        </div>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </CardBody>
-                  </Card>
-                </>
-              )}
-
-              {tab==='report' && (
-                <>
-                  <Card>
-                    <CardHeader title="최근 4주 루틴 완료율" />
-                    <CardBody>
-                      {state.routines.length===0 ? (
-                        <div className="text-sm text-slate-500">루틴이 없습니다.</div>
-                      ) : (
-                        <ul className="space-y-3">
-                          {state.routines.map(r=>{
-                            const pct = Math.round(getRoutineWeeklyCompletion(state, r.id));
-                            return (
-                              <li key={r.id} className="flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
-                                <div className="flex-1">
-                                  <div className="font-medium">{r.title}</div>
-                                  <div className="text-xs text-slate-500">최근 4주 평균 {pct}%</div>
-                                </div>
-                                <div className="w-40"><Progress value={pct} /></div>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </CardBody>
-                  </Card>
-
-                  <Card>
-                    <CardHeader title="목표 진행률 요약" />
-                    <CardBody>
-                      {goalsWithProgress.length===0 ? (
-                        <div className="text-sm text-slate-500">목표가 없습니다.</div>
-                      ) : (
-                        <ul className="space-y-3">
-                          {goalsWithProgress.map(g=> (
-                            <li key={g.id} className="flex items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium truncate">{g.title}</div>
-                                <div className="text-xs text-slate-500">목표일 {formatDateK(g.targetDate)} · 진행률 {g._progress}%</div>
-                              </div>
-                              <div className="w-40"><Progress value={g._progress} /></div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </CardBody>
-                  </Card>
-                </>
-              )}
-            </main>
-
-            {/* 푸터: 홈 화면 추가 안내 */}
-            <footer className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 bg-white">
-              <div className="flex items-center justify-between gap-3">
-                <div>GitHub Pages에 업로드 후, 크롬에서 <b>홈 화면에 추가</b>하면 앱처럼 사용 가능합니다.</div>
-                <GhostBtn onClick={()=> alert('안드로이드(갤럭시) 크롬: 우측 상단 ••• → 홈 화면에 추가')}>방법 보기</GhostBtn>
-              </div>
-            </footer>
-          </div>
+                    </div>
+                )}
+                {scheduleType === 'perWeek' && (
+                    <div>
+                        <label className="text-sm font-medium text-slate-700">주당 횟수</label>
+                        <Input type="number" value={perWeek} onChange={function(e) { setPerWeek(e.target.value) }} min="1" max="7" />
+                    </div>
+                )}
+                <div className="flex justify-end gap-2 pt-4">
+                    <GhostBtn onClick={onCancel}>취소</GhostBtn>
+                    <Button type="submit">{routine ? '저장' : '추가'}</Button>
+                </div>
+            </form>
         );
-      }
+    };
 
-      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-  </body>
+    /***********************************
+     * Main App
+     ***********************************/
+    function App() {
+      // App data state
+      const [state, setState] = useState(() => loadState() || defaultState);
+
+      // UI state
+      const [tab, setTab] = useState('today');
+      const [date, setDate] = useState(todayStr());
+      const [modal, setModal] = useState({ isOpen: false, type: null, data: null });
+      const [confirmModal, setConfirmModal] = useState({ isOpen: false, onConfirm: function() {}, title: '', message: '' });
+
+      // Persist state to localStorage on change
+      useEffect(() => {
+        saveState(state);
+      }, [state]);
+
+      // Memos for derived state
+      const todayCheckins = useMemo(() => (state.checkins && state.checkins[date]) || {}, [state.checkins, date]);
+      const scheduledRoutines = useMemo(() => state.routines.filter(function(r) { return isRoutineScheduledToday(r, new Date(date)) }), [state.routines, date]);
+      const todaysProgress = useMemo(() => {
+        if (!scheduledRoutines.length) return 0;
+        const done = scheduledRoutines.filter(function(r) { return todayCheckins[r.id] }).length;
+        return Math.round(done / scheduledRoutines.length * 100);
+      }, [scheduledRoutines, todayCheckins]);
+      const goalsWithProgress = useMemo(() => state.goals.map(function(g) { return { ...g, _progress: Math.round(computeGoalProgress(state, g)) } }), [state]);
+
+      // Actions (state updates)
+      const toggleCheckin = (rid) => {
+        setState(function(prev) {
+          const day = (prev.checkins && prev.checkins[date]) ? {...prev.checkins[date]} : {};
+          day[rid] = !day[rid];
+          const newCheckins = { ...(prev.checkins || {}), [date]: day };
+          return { ...prev, checkins: newCheckins };
+        });
+      };
+      
+      const setNote = (text) => {
+        setState(function(prev) {
+          const newNotes = { ...(prev.notes || {}), [date]: text };
+          return { ...prev, notes: newNotes };
+        });
+      };
+
+      const upsertRoutine = (draft) => {
+        setState(function(prev) {
+          if (draft.id) {
+            return { ...prev, routines: prev.routines.map(function(r) { return r.id === draft.id ? {...r, ...draft} : r }) };
+          } else {
+            const newRoutine = { ...draft, id: uid(), createdAt: todayStr() };
+            return { ...prev, routines: [...prev.routines, newRoutine] };
+          }
+        });
+        closeModal();
+      };
+      
+      const handleDeleteRoutine = (rid) => {
+        showConfirm(
+          '루틴 삭제',
+          '정말로 이 루틴을 삭제하시겠습니까?',
+          function() {
+            setState(function(prev) {
+              return {
+                ...prev,
+                routines: prev.routines.filter(function(r) { return r.id !== rid })
+              };
+            });
+          }
+        );
+      };
+
+      // Modal handlers
+      const openModal = (type, data = null) => setModal({ isOpen: true, type: type, data: data });
+      const closeModal = () => setModal({ isOpen: false, type: null, data: null });
+      const showConfirm = (title, message, onConfirm) => setConfirmModal({ isOpen: true, title: title, message: message, onConfirm: onConfirm });
+      const closeConfirm = () => setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: function() {} });
+
+      const handleConfirm = () => {
+        if (confirmModal.onConfirm) {
+          confirmModal.onConfirm();
+        }
+        closeConfirm();
+      };
+
+      const renderModalContent = () => {
+        switch (modal.type) {
+          case 'routine':
+            return <RoutineForm routine={modal.data} onSave={upsertRoutine} onCancel={closeModal} />;
+          default:
+            return null;
+        }
+      };
+
+      return (
+        <div className="mx-auto max-w-3xl h-full flex flex-col">
+          <Modal isOpen={modal.isOpen} onClose={closeModal} title={modal.type === 'routine' ? (modal.data ? '루틴 편집' : '새 루틴 추가') : ''}>
+            {renderModalContent()}
+          </Modal>
+          <ConfirmationModal modalConfig={confirmModal} onConfirm={handleConfirm} onCancel={closeConfirm} />
+
+          <header className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur border-b border-slate-200">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-sky-500 grid place-items-center text-white font-bold text-xl">D</div>
+                <div>
+                  <div className="text-sm text-slate-500">Daily Vision Tracker</div>
+                  <div className="font-semibold">오늘을 쌓아 비전으로</div>
+                </div>
+              </div>
+            </div>
+            <nav className="px-2 pb-2 grid grid-cols-4 gap-2">
+              {[
+                { id: 'today', label: '오늘', Icon: Calendar },
+                { id: 'routines', label: '루틴', Icon: Repeat },
+                { id: 'goals', label: '비전', Icon: Target },
+                { id: 'report', label: '리포트', Icon: BarChart2 },
+              ].map(function(t) { return (
+                <button key={t.id} onClick={function() { setTab(t.id) }} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${tab === t.id ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}>
+                  <t.Icon size={16} />
+                  <span>{t.label}</span>
+                </button>
+              )}) }
+            </nav>
+          </header>
+
+          <main className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100/50">
+            {tab === 'today' && (
+              <Fragment>
+                <Card>
+                  <CardHeader title="오늘 루틴">
+                    <input type="date" value={date} onChange={function(e) { setDate(e.target.value) }} className="rounded-xl border px-3 py-1.5 text-sm border-slate-300 bg-white" />
+                  </CardHeader>
+                  <CardBody>
+                    {scheduledRoutines.length === 0 ? (
+                      <div className="text-slate-500 text-center py-8">오늘 예정된 루틴이 없습니다.</div>
+                    ) : (
+                      <ul className="space-y-3">
+                        {scheduledRoutines.map(function(r) { return (
+                          <li key={r.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                            <input id={`r-${r.id}`} type="checkbox" checked={!!todayCheckins[r.id]} onChange={function() { toggleCheckin(r.id) }} className="h-6 w-6 rounded-md border-slate-300 text-sky-600 focus:ring-sky-500" />
+                            <label htmlFor={`r-${r.id}`} className="flex-1 cursor-pointer">
+                              <div className="font-medium text-slate-800">{r.title}</div>
+                            </label>
+                            <span className="w-4 h-4 rounded-full" style={{ background: r.color || '#38bdf8' }}></span>
+                            <GhostBtn Icon={Edit} onClick={function() { openModal('routine', r) }} className="text-slate-400 hover:text-sky-600" />
+                            <GhostBtn Icon={Trash2} onClick={function() { handleDeleteRoutine(r.id) }} className="text-slate-400 hover:text-red-600" />
+                          </li>
+                        )})}
+                      </ul>
+                    )}
+                    <div className="mt-6 flex items-center justify-between">
+                      <div className="flex-1 mr-4">
+                        <div className="flex justify-between mb-1">
+                            <span className="text-sm font-medium text-slate-600">오늘 진행률</span>
+                            <span className="text-sm font-bold text-sky-600">{todaysProgress}%</span>
+                        </div>
+                        <Progress value={todaysProgress} />
+                      </div>
+                      <Button Icon={Plus} onClick={function() { openModal('routine') }}>루틴 추가</Button>
+                    </div>
+                  </CardBody>
+                </Card>
+                <Card>
+                  <CardHeader title="오늘 메모" />
+                  <CardBody>
+                    <Textarea rows={5} placeholder="오늘의 생각이나 기록을 남겨보세요..." value={(state.notes && state.notes[date]) || ''} onChange={function(e) { setNote(e.target.value) }} />
+                  </CardBody>
+                </Card>
+              </Fragment>
+            )}
+             {tab==='routines' && (
+                <Card>
+                  <CardHeader title="전체 루틴 목록">
+                    <Button Icon={Plus} onClick={function() { openModal('routine') }}>새 루틴 추가</Button>
+                  </CardHeader>
+                  <CardBody>
+                    {state.routines.length === 0 ? (
+                      <div className="text-center py-10 text-slate-500">루틴이 없습니다.</div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {state.routines.map(function(r) { return (
+                           <li key={r.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200">
+                            <span className="w-4 h-4 rounded-full" style={{ background: r.color || '#38bdf8' }}></span>
+                            <div className="flex-1">
+                              <p className="font-semibold">{r.title}</p>
+                              <p className="text-xs text-slate-500">
+                                {(r.schedule && r.schedule.type === 'days') ? `매주 ${r.schedule.days.map(function(d) { return WEEKDAYS[d] }).join(', ')}` : `주 ${r.schedule.perWeek}회`}
+                              </p>
+                            </div>
+                            <GhostBtn Icon={Edit} onClick={function() { openModal('routine', r) }}>편집</GhostBtn>
+                            <GhostBtn Icon={Trash2} onClick={function() { handleDeleteRoutine(r.id) }} className="hover:text-red-500">삭제</GhostBtn>
+                          </li>
+                        )})}
+                      </ul>
+                    )}
+                  </CardBody>
+                </Card>
+             )}
+              {tab==='goals' && <div className="text-center text-slate-500 py-10">목표/비전 기능은 준비 중입니다.</div>}
+              {tab==='report' && <div className="text-center text-slate-500 py-10">리포트 기능은 준비 중입니다.</div>}
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+
+  <!-- Babel for JSX transpilation - MOVED TO THE END -->
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</body>
 </html>
