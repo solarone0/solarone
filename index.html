@@ -1,380 +1,646 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale-1.0">
-    <title>나만의 블로그</title>
-    
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily Vision Tracker</title>
+    <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
-
-    <!-- Firebase SDK -->
-    <script type="module">
-        // 1. 분리된 firebase-config.js 파일에서 설정 정보를 가져옵니다.
-        import firebaseConfig from './firebase-config.js';
-
-        // --- Firebase SDK (Google Auth Provider로 변경) ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        window.db = db;
-        window.auth = auth;
-        window.firebase = { 
-            collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp,
-            GoogleAuthProvider, // Github에서 Google로 변경
-            signInWithPopup, signOut, onAuthStateChanged
-        };
-    </script>
-
+    <meta name="theme-color" content="#0ea5e9" />
+    <meta name="description" content="데일리 루틴 · 메모 · 장기 비전 진행률 트래커" />
     <style>
-        :root { --bg-color: #ffffff; --text-color: #334155; --text-muted-color: #64748b; --heading-color: #1e293b; --card-bg-color: #ffffff; --border-color: #e2e8f0; --link-color: #2563eb; --code-bg-color: #f1f5f9; }
-        html.dark { --bg-color: #020617; --text-color: #cbd5e1; --text-muted-color: #94a3b8; --heading-color: #f1f5f9; --card-bg-color: #0f172a; --border-color: #334155; --link-color: #60a5fa; --code-bg-color: #1e293b; }
-        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
-        .prose { max-width: 42rem; margin-left: auto; margin-right: auto; color: var(--text-color); }
-        .prose h1, .prose h2, .prose h3 { font-weight: 800; margin-top: 2em; margin-bottom: 1em; color: var(--heading-color); }
-        .prose p { margin-top: 1.5em; margin-bottom: 1.5em; line-height: 1.9; font-size: 1.125rem; }
-        .view { display: none; }
-        .view.active { display: block; animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .admin-only { display: none; }
+      /* 모바일 터치 피드백 개선 */
+      * { -webkit-tap-highlight-color: transparent; }
+      html, body, #root { height: 100%; }
     </style>
-</head>
-<body>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="root" class="h-full"></div>
 
-    <!-- Main View: Blog List -->
-    <div id="main-view" class="view active">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="lg:flex lg:gap-x-12">
-                <aside class="lg:w-1/4 py-8 lg:sticky lg:top-0 lg:self-start lg:h-screen lg:overflow-y-auto">
-                    <div class="space-y-6">
-                        <div class="flex items-center justify-between">
-                            <h1 id="blog-title" class="text-3xl font-bold" style="color: var(--heading-color);">나의 블로그</h1>
-                            <div id="auth-container"></div>
-                        </div>
-                        <p id="blog-description" style="color: var(--text-muted-color);">이 공간은 생각과 지식을 기록하기 위해 만들어졌습니다.</p>
-                        <button id="new-post-btn" class="w-full bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500 px-4 py-2 rounded-lg shadow hover:bg-slate-700 focus:outline-none transition-colors admin-only">
-                            새 글 작성하기
-                        </button>
-                        <div class="space-y-4 pt-4">
-                            <input type="search" id="search-input" placeholder="검색..." class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" style="background-color: var(--card-bg-color); border-color: var(--border-color);">
-                            <div id="tags-container" class="space-y-2">
-                                <h3 class="font-semibold" style="color: var(--heading-color);">태그</h3>
-                                <div id="tags-list" class="flex flex-wrap gap-2"></div>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
-                <main class="lg:w-3/4 lg:pl-12 py-8">
-                    <ul id="posts-list" class="space-y-10"></ul>
-                </main>
-            </div>
-        </div>
-    </div>
+    <!-- React & Babel (브라우저에서 바로 JSX 실행) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
-    <!-- Detail View: Fullscreen Post -->
-    <div id="detail-view" class="view" style="background-color: var(--bg-color);">
-        <div class="fixed top-4 left-4 z-10 flex items-center space-x-4">
-            <button id="back-to-list-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                <span>목록</span>
-            </button>
-            <button id="edit-post-btn" class="flex items-center space-x-2 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm px-4 py-2 rounded-full shadow-md hover:bg-white dark:hover:bg-slate-700 transition-colors admin-only">
-                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
-                <span>수정</span>
-            </button>
-             <button id="delete-post-btn" class="flex items-center space-x-2 bg-red-500/80 backdrop-blur-sm text-white px-4 py-2 rounded-full shadow-md hover:bg-red-500 transition-colors admin-only">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                <span>삭제</span>
-            </button>
+    <script type="text/babel">
+      const { useEffect, useMemo, useRef, useState } = React;
+
+      /***********************************
+       * 유틸
+       ***********************************/
+      const uid = () => Math.random().toString(36).slice(2, 10);
+      const todayStr = (d=new Date()) => d.toISOString().slice(0,10); // YYYY-MM-DD
+      const weekday = (d=new Date()) => d.getDay(); // 0~6 (일~토)
+      const WEEKDAYS = ['일','월','화','수','목','금','토'];
+
+      const clamp = (v, min=0, max=100) => Math.min(max, Math.max(min, v));
+
+      const formatDateK = (iso) => {
+        try {
+          const d = new Date(iso);
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        } catch { return iso; }
+      }
+
+      /***********************************
+       * 로컬 스토리지 (간단 퍼시스턴스)
+       ***********************************/
+      const STORAGE_KEY = 'dvt_v1_state';
+      const loadState = () => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch { return null; }
+      }
+      const saveState = (state) => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      }
+
+      /***********************************
+       * 기본 상태 구조
+       ***********************************/
+      const defaultState = {
+        routines: [
+          // { id, title, schedule: {type:'days'|'perWeek', days:[0..6], perWeek:3}, color, createdAt }
+        ],
+        checkins: {
+          // 'YYYY-MM-DD': { [routineId]: true }
+        },
+        notes: {
+          // 'YYYY-MM-DD': '메모 내용'
+        },
+        goals: [
+          // { id, title, targetDate:'YYYY-MM-DD', milestones:[{id,title,weight(0-100),type:'manual'|'linked', routineId?, progress(0-100)}] }
+        ],
+        createdAt: todayStr(),
+      };
+
+      /***********************************
+       * 진행률 계산 도우미
+       ***********************************/
+      function isRoutineScheduledToday(routine, date = new Date()) {
+        if (!routine?.schedule) return true;
+        const w = weekday(date);
+        if (routine.schedule.type === 'days') return routine.schedule.days?.includes(w);
+        if (routine.schedule.type === 'perWeek') {
+          // 그 주에 perWeek 횟수 목표: 보기 편하게 오늘 포함 주(월~일)에서 체크인 남은 횟수 등으로 판단하지 않고, 오늘은 항상 표시
+          return true;
+        }
+        return true;
+      }
+
+      function startOfWeek(d) {
+        const x = new Date(d);
+        const w = x.getDay();
+        const diff = (w+6) % 7; // 월(1) 시작 기준: 일(0) -> 6
+        x.setDate(x.getDate() - diff);
+        x.setHours(0,0,0,0);
+        return x;
+      }
+      function endOfWeek(d) {
+        const s = startOfWeek(d);
+        const e = new Date(s); e.setDate(s.getDate()+6); e.setHours(23,59,59,999); return e;
+      }
+
+      function getRoutineWeeklyCompletion(state, routineId, endDate = new Date(), weeks=4) {
+        // 최근 N주 평균 완료율 (perWeek는 목표 대비 완료율, days는 요일 스케줄 대비 완료율)
+        const r = state.routines.find(r=>r.id===routineId);
+        if (!r) return 0;
+        const weeksArr = [];
+        let end = endOfWeek(endDate);
+        for (let i=0;i<weeks;i++) {
+          const s = startOfWeek(end);
+          let planned = 0; let done = 0;
+          for (let d=new Date(s); d<=end; d.setDate(d.getDate()+1)) {
+            const iso = todayStr(d);
+            const ci = state.checkins[iso] || {};
+            if (r.schedule?.type === 'days') {
+              const should = r.schedule.days?.includes(weekday(d));
+              if (should) planned += 1;
+              if (ci[r.id]) done += 1;
+            } else if (r.schedule?.type === 'perWeek') {
+              // perWeek는 주 단위 목표치
+              planned = r.schedule.perWeek || 0; // 주간 목표
+              // 완료는 그 주 동안 체크인 횟수 합계(중복 허용)
+              done = 0;
+              for (let d2=new Date(s); d2<=end; d2.setDate(d2.getDate()+1)) {
+                const iso2 = todayStr(d2);
+                const ci2 = state.checkins[iso2] || {};
+                if (ci2[r.id]) done += 1;
+              }
+              break; // 이 주는 계산 끝
+            } else {
+              // 스케줄 없으면 오늘 체크되면 완료
+              planned += 1; if (ci[r.id]) done += 1;
+            }
+          }
+          const pct = planned>0 ? (done/planned)*100 : (done>0?100:0);
+          weeksArr.push(pct);
+          end = new Date(s); end.setDate(end.getDate()-1);
+        }
+        return weeksArr.length? weeksArr.reduce((a,b)=>a+b,0)/weeksArr.length : 0;
+      }
+
+      function computeGoalProgress(state, goal) {
+        if (!goal?.milestones?.length) return 0;
+        let sumW = 0, acc = 0;
+        for (const m of goal.milestones) {
+          const w = clamp(m.weight||0, 0, 100);
+          sumW += w;
+          let p = 0;
+          if (m.type === 'linked' && m.routineId) {
+            p = getRoutineWeeklyCompletion(state, m.routineId, new Date(), 4);
+          } else {
+            p = clamp(m.progress||0, 0, 100);
+          }
+          acc += w * p / 100;
+        }
+        if (sumW === 0) return 0;
+        return clamp(acc / sumW * 100, 0, 100);
+      }
+
+      /***********************************
+       * 공통 UI 컴포넌트
+       ***********************************/
+      const Card = ({children, className=''}) => (
+        <div className={`rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 ${className}`}>{children}</div>
+      );
+      const CardHeader = ({title, children, className=''}) => (
+        <div className={`flex items-center justify-between border-b border-slate-100 px-4 py-3 ${className}`}>
+          <h3 className="font-semibold text-slate-800">{title}</h3>
+          <div>{children}</div>
         </div>
-        <div class="px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
-            <header class="max-w-3xl mx-auto mb-12 text-center">
-                <h1 id="detail-title" class="text-4xl md:text-5xl font-extrabold mb-4" style="color: var(--heading-color);"></h1>
-                <p id="detail-meta" class="text-lg" style="color: var(--text-muted-color);"></p>
-                <div id="detail-tags" class="mt-6 flex justify-center gap-2"></div>
+      );
+      const CardBody = ({children, className=''}) => (
+        <div className={`p-4 ${className}`}>{children}</div>
+      );
+
+      const Pill = ({children}) => (
+        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-slate-200 text-slate-600">{children}</span>
+      );
+
+      const Button = ({children, onClick, className='', type='button'}) => (
+        <button type={type} onClick={onClick} className={`active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 ${className}`}>{children}</button>
+      );
+
+      const GhostBtn = ({children, onClick, className='', type='button'}) => (
+        <button type={type} onClick={onClick} className={`inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-transparent text-slate-600 hover:bg-slate-100 ${className}`}>{children}</button>
+      );
+
+      const Input = (props) => (<input {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 ${props.className||''}`} />);
+      const Textarea = (props) => (<textarea {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 ${props.className||''}`}></textarea>);
+      const Select = (props) => (<select {...props} className={`w-full rounded-xl border px-3 py-2 text-sm border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white ${props.className||''}`}></select>);
+
+      const Progress = ({value}) => (
+        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full bg-sky-500" style={{width: `${clamp(value)}%`}}></div>
+        </div>
+      );
+
+      /***********************************
+       * 메인 앱
+       ***********************************/
+      function App(){
+        const [state, setState] = useState(() => loadState() || defaultState);
+        const [tab, setTab] = useState('today');
+        const [date, setDate] = useState(todayStr());
+
+        useEffect(()=>{ saveState(state); }, [state]);
+
+        // 오늘 표시용
+        const todayCheckins = state.checkins[date] || {};
+
+        const scheduledRoutines = useMemo(()=> state.routines.filter(r=>isRoutineScheduledToday(r, new Date(date))), [state.routines, date]);
+
+        const todaysProgress = useMemo(()=>{
+          if (!scheduledRoutines.length) return 0;
+          const done = scheduledRoutines.filter(r => todayCheckins[r.id]).length;
+          return Math.round(done / scheduledRoutines.length * 100);
+        }, [scheduledRoutines, todayCheckins]);
+
+        const goalsWithProgress = useMemo(()=> state.goals.map(g=>({ ...g, _progress: Math.round(computeGoalProgress(state, g)) })), [state]);
+
+        // 액션
+        const toggleCheckin = (rid) => {
+          setState(prev=>{
+            const day = prev.checkins[date] ? {...prev.checkins[date]} : {};
+            day[rid] = !day[rid];
+            return { ...prev, checkins: { ...prev.checkins, [date]: day } };
+          });
+        }
+
+        const upsertRoutine = (draft) => {
+          setState(prev=>{
+            if (draft.id) {
+              return { ...prev, routines: prev.routines.map(r => r.id===draft.id? {...r, ...draft}: r) };
+            } else {
+              const r = { id: uid(), title: draft.title||'새 루틴', schedule: draft.schedule||{type:'days', days:[1,2,3,4,5]}, color: draft.color||'#38bdf8', createdAt: todayStr() };
+              return { ...prev, routines: [...prev.routines, r] };
+            }
+          })
+        }
+
+        const deleteRoutine = (rid) => {
+          setState(prev=>({
+            ...prev,
+            routines: prev.routines.filter(r=>r.id!==rid),
+            // 체크인도 함께 정리(보존하려면 이 부분 제거)
+            checkins: Object.fromEntries(Object.entries(prev.checkins).map(([k,v])=>[k, Object.fromEntries(Object.entries(v).filter(([id])=>id!==rid))]))
+          }))
+        }
+
+        const setNote = (text) => setState(prev=>({ ...prev, notes: { ...prev.notes, [date]: text } }));
+
+        const upsertGoal = (draft) => {
+          setState(prev=>{
+            if (draft.id) {
+              return { ...prev, goals: prev.goals.map(g=>g.id===draft.id? {...g, ...draft}: g) };
+            } else {
+              const g = { id: uid(), title: draft.title||'새 목표', targetDate: draft.targetDate||todayStr(), milestones: draft.milestones||[] };
+              return { ...prev, goals: [...prev.goals, g] };
+            }
+          })
+        }
+        const deleteGoal = (gid) => setState(prev=>({ ...prev, goals: prev.goals.filter(g=>g.id!==gid) }));
+
+        const upsertMilestone = (gid, mDraft) => {
+          setState(prev=>{
+            const goals = prev.goals.map(g=>{
+              if (g.id!==gid) return g;
+              const ms = g.milestones || [];
+              if (mDraft.id) {
+                return { ...g, milestones: ms.map(m=>m.id===mDraft.id? {...m, ...mDraft}: m) };
+              } else {
+                const m = { id: uid(), title: mDraft.title||'새 마일스톤', weight: clamp(mDraft.weight||0), type: mDraft.type||'manual', routineId: mDraft.routineId||null, progress: clamp(mDraft.progress||0) };
+                return { ...g, milestones: [...ms, m] };
+              }
+            })
+            return { ...prev, goals };
+          })
+        }
+        const deleteMilestone = (gid, mid) => setState(prev=>({
+          ...prev,
+          goals: prev.goals.map(g=> g.id===gid? { ...g, milestones: (g.milestones||[]).filter(m=>m.id!==mid) }: g )
+        }));
+
+        const exportJson = () => {
+          const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `dvt-backup-${todayStr()}.json`; a.click();
+          URL.revokeObjectURL(url);
+        }
+        const importJson = (file) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              setState(data); alert('가져오기 완료');
+            } catch(err){ alert('가져오기 실패: ' + err.message); }
+          }
+          reader.readAsText(file);
+        }
+
+        return (
+          <div className="mx-auto max-w-3xl h-full flex flex-col">
+            {/* 헤더 */}
+            <header className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur border-b border-slate-200">
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl bg-sky-500 grid place-items-center text-white font-bold">D</div>
+                  <div>
+                    <div className="text-sm text-slate-500">Daily Vision Tracker</div>
+                    <div className="font-semibold">오늘의 나를 쌓아 비전으로</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <GhostBtn onClick={exportJson}>백업</GhostBtn>
+                  <label className="inline-flex items-center cursor-pointer">
+                    <input type="file" accept="application/json" className="hidden" onChange={(e)=> e.target.files?.[0] && importJson(e.target.files[0])} />
+                    <span className="inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium bg-transparent text-slate-600 hover:bg-slate-100">가져오기</span>
+                  </label>
+                </div>
+              </div>
+              {/* 탭 */}
+              <nav className="px-2 pb-2 grid grid-cols-4 gap-2">
+                {[
+                  {id:'today', label:'오늘'},
+                  {id:'routines', label:'루틴'},
+                  {id:'goals', label:'비전/목표'},
+                  {id:'report', label:'리포트'},
+                ].map(t => (
+                  <button key={t.id} onClick={()=>setTab(t.id)} className={`rounded-xl px-3 py-2 text-sm font-medium ${tab===t.id? 'bg-sky-600 text-white':'bg-white text-slate-700 border border-slate-200'}`}>{t.label}</button>
+                ))}
+              </nav>
             </header>
-            <article id="detail-content" class="prose"></article>
-        </div>
-    </div>
-    
-    <!-- Admin View -->
-    <div id="admin-view" class="view">
-        <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-            <h2 class="text-3xl font-bold mb-2" style="color: var(--heading-color);">블로그 설정</h2>
-            <p class="mb-8" style="color: var(--text-muted-color);">블로그의 제목과 소개글을 수정할 수 있습니다.</p>
-            <form id="admin-form" class="space-y-6">
-                <div>
-                    <label for="admin-title" class="block text-sm font-medium">블로그 제목</label>
-                    <input type="text" id="admin-title" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" style="background-color: var(--card-bg-color); border-color: var(--border-color);">
-                </div>
-                <div>
-                    <label for="admin-description" class="block text-sm font-medium">블로그 소개</label>
-                    <textarea id="admin-description" rows="4" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" style="background-color: var(--card-bg-color); border-color: var(--border-color);"></textarea>
-                </div>
-                <div class="flex items-center justify-end space-x-3 pt-2">
-                    <button id="admin-cancel-btn" type="button" class="px-4 py-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600" style="background-color: var(--code-bg-color);">취소</button>
-                    <button type="submit" class="px-4 py-2 bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500 rounded-md shadow">저장하기</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
-    <!-- Post Modal (Editor) -->
-    <div id="post-modal" class="fixed inset-0 bg-black/60 h-full w-full z-30 flex items-center justify-center p-4 hidden">
-        <div class="w-full max-w-6xl shadow-2xl rounded-lg flex flex-col h-[90vh]" style="background-color: var(--card-bg-color);">
-            <form id="post-form" class="flex flex-col h-full">
-                <div class="p-4 border-b" style="border-color: var(--border-color);">
-                    <input type="text" id="post-title" required placeholder="제목을 입력하세요" class="text-2xl font-bold w-full bg-transparent focus:outline-none" style="color: var(--heading-color);">
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow p-4 overflow-hidden">
-                    <div class="flex flex-col h-full border rounded-md" style="border-color: var(--border-color);">
-                        <div id="editor-toolbar" class="flex items-center flex-wrap gap-1 p-2 border-b" style="border-color: var(--border-color);"></div>
-                        <textarea id="post-content" required placeholder="이곳에 내용을 작성하세요..." class="w-full flex-grow p-3 resize-none focus:outline-none bg-transparent"></textarea>
-                    </div>
-                    <div class="flex flex-col h-full">
-                        <h3 class="font-semibold mb-2" style="color: var(--heading-color);">미리보기</h3>
-                        <div id="markdown-preview" class="w-full flex-grow p-3 border rounded-md overflow-y-auto prose" style="border-color: var(--border-color);"></div>
-                    </div>
-                </div>
-                <div class="p-4 border-t" style="border-color: var(--border-color);">
-                    <input type="text" id="post-tags" placeholder="태그 (쉼표로 구분: #생략)" class="w-full p-2 border rounded-md bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500" style="border-color: var(--border-color);">
-                </div>
-                <div class="flex justify-end items-center p-4 border-t space-x-2" style="border-color: var(--border-color);">
-                    <button id="cancel-post-btn" type="button" class="px-4 py-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600" style="background-color: var(--code-bg-color);">취소</button>
-                    <button id="submit-post-btn" type="submit" class="px-4 py-2 bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-500 rounded-md shadow">저장하기</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <script type="module">
-        document.addEventListener('DOMContentLoaded', () => {
-            const { db, auth, firebase } = window;
-            
-            const setupDarkMode = () => {
-                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.documentElement.classList.add('dark');
-                } else {
-                    document.documentElement.classList.remove('dark');
-                }
-            };
-            
-            const views = { main: document.getElementById('main-view'), detail: document.getElementById('detail-view'), admin: document.getElementById('admin-view') };
-            const blogTitle = document.getElementById('blog-title');
-            const blogDescription = document.getElementById('blog-description');
-            const postsList = document.getElementById('posts-list');
-            const newPostBtn = document.getElementById('new-post-btn');
-            const searchInput = document.getElementById('search-input');
-            const tagsContainer = document.getElementById('tags-list');
-            const authContainer = document.getElementById('auth-container');
-            
-            const detailTitle = document.getElementById('detail-title');
-            const detailMeta = document.getElementById('detail-meta');
-            const detailContent = document.getElementById('detail-content');
-            const detailTags = document.getElementById('detail-tags');
-            const backToListBtn = document.getElementById('back-to-list-btn');
-            const editPostBtn = document.getElementById('edit-post-btn');
-            const deletePostBtn = document.getElementById('delete-post-btn');
+            {/* 본문 */}
+            <main className="flex-1 overflow-y-auto p-4 space-y-4">
+              {tab==='today' && (
+                <>
+                  <Card>
+                    <CardHeader title="오늘 루틴">
+                      <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="rounded-xl border px-2 py-1 text-sm border-slate-200" />
+                    </CardHeader>
+                    <CardBody>
+                      {scheduledRoutines.length===0 ? (
+                        <div className="text-slate-500 text-sm">오늘 예정된 루틴이 없습니다. 루틴 탭에서 추가해보세요.</div>
+                      ) : (
+                        <ul className="space-y-2">
+                          {scheduledRoutines.map(r=> (
+                            <li key={r.id} className="flex items-center gap-3">
+                              <input id={`r-${r.id}`} type="checkbox" checked={!!todayCheckins[r.id]} onChange={()=>toggleCheckin(r.id)} className="h-5 w-5" />
+                              <label htmlFor={`r-${r.id}`} className="flex-1">
+                                <div className="font-medium">{r.title}</div>
+                                <div className="text-xs text-slate-500">
+                                  {r.schedule?.type==='days' && <span>요일 지정: {r.schedule.days.map(d=>WEEKDAYS[d]).join(', ')}</span>}
+                                  {r.schedule?.type==='perWeek' && <span>주 {r.schedule.perWeek}회</span>}
+                                </div>
+                              </label>
+                              <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
+                              <GhostBtn onClick={()=>{
+                                const title = prompt('루틴 이름 수정', r.title)||r.title;
+                                const type = prompt('스케줄 타입 (days|perWeek)', r.schedule?.type||'days')||r.schedule?.type||'days';
+                                let schedule = {type};
+                                if (type==='days') {
+                                  const daysStr = prompt('요일(0=일~6=토), 콤마구분', (r.schedule.days||[1,2,3,4,5]).join(','))||'';
+                                  schedule.days = daysStr.split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
+                                } else {
+                                  const perWeek = parseInt(prompt('주당 횟수', r.schedule.perWeek||3)||'3')||3;
+                                  schedule.perWeek = perWeek;
+                                }
+                                const color = prompt('색상(hex)', r.color||'#38bdf8')||r.color||'#38bdf8';
+                                upsertRoutine({ ...r, title, schedule, color });
+                              }}>편집</GhostBtn>
+                              <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteRoutine(r.id); }}>삭제</GhostBtn>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="mt-4 flex items-center justify-between">
+                        <div className="flex-1 mr-4">
+                          <Progress value={todaysProgress} />
+                          <div className="mt-1 text-xs text-slate-500">오늘 진행률 {todaysProgress}%</div>
+                        </div>
+                        <Button onClick={()=>{
+                          const title = prompt('루틴 이름','물 2컵 마시기');
+                          if (!title) return;
+                          const type = prompt('스케줄 타입 (days|perWeek)','days');
+                          let schedule = {type};
+                          if (type==='days') {
+                            const daysStr = prompt('요일(0=일~6=토), 콤마구분','1,2,3,4,5');
+                            schedule.days = (daysStr||'').split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
+                          } else {
+                            const perWeek = parseInt(prompt('주당 횟수','3'))||3;
+                            schedule.perWeek = perWeek;
+                          }
+                          const color = prompt('색상(hex)', '#38bdf8')||'#38bdf8';
+                          upsertRoutine({ title, schedule, color });
+                        }}>루틴 추가</Button>
+                      </div>
+                    </CardBody>
+                  </Card>
 
-            const goToAdminBtn = document.getElementById('go-to-admin-btn');
-            const adminForm = document.getElementById('admin-form');
-            const adminTitleInput = document.getElementById('admin-title');
-            const adminDescriptionInput = document.getElementById('admin-description');
-            const adminCancelBtn = document.getElementById('admin-cancel-btn');
+                  <Card>
+                    <CardHeader title="오늘 메모" />
+                    <CardBody>
+                      <Textarea rows={5} placeholder="오늘의 생각/기록을 남겨보세요" value={state.notes[date]||''} onChange={(e)=>setNote(e.target.value)} />
+                      <div className="mt-2 text-xs text-slate-500">날짜별로 자동 저장됩니다.</div>
+                    </CardBody>
+                  </Card>
+                </>
+              )}
 
-            const postModal = document.getElementById('post-modal');
-            const postForm = document.getElementById('post-form');
-            const postTitleInput = document.getElementById('post-title');
-            const postContentInput = document.getElementById('post-content');
-            const postTagsInput = document.getElementById('post-tags');
-            const markdownPreview = document.getElementById('markdown-preview');
-            const cancelPostBtn = document.getElementById('cancel-post-btn');
-            const editorToolbar = document.getElementById('editor-toolbar');
+              {tab==='routines' && (
+                <>
+                  <Card>
+                    <CardHeader title="루틴 목록">
+                      <Button onClick={()=>{
+                        const title = prompt('루틴 이름','아침 스트레칭');
+                        if (!title) return;
+                        const type = prompt('스케줄 타입 (days|perWeek)','days');
+                        let schedule = {type};
+                        if (type==='days') {
+                          const daysStr = prompt('요일(0=일~6=토), 콤마구분','1,2,3,4,5');
+                          schedule.days = (daysStr||'').split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
+                        } else {
+                          const perWeek = parseInt(prompt('주당 횟수','3'))||3;
+                          schedule.perWeek = perWeek;
+                        }
+                        const color = prompt('색상(hex)', '#34d399')||'#34d399';
+                        upsertRoutine({ title, schedule, color });
+                      }}>추가</Button>
+                    </CardHeader>
+                    <CardBody>
+                      {state.routines.length===0 ? (
+                        <div className="text-sm text-slate-500">아직 루틴이 없습니다. 상단의 추가 버튼으로 만들어보세요.</div>
+                      ) : (
+                        <ul className="space-y-3">
+                          {state.routines.map(r => (
+                            <li key={r.id} className="rounded-xl border border-slate-200 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
+                                  <div>
+                                    <div className="font-medium">{r.title}</div>
+                                    <div className="text-xs text-slate-500">{r.schedule?.type==='days' ? `요일: ${r.schedule.days.map(d=>WEEKDAYS[d]).join(', ')}` : `주 ${r.schedule.perWeek}회`}</div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <GhostBtn onClick={()=>{
+                                    const title = prompt('루틴 이름 수정', r.title)||r.title;
+                                    const type = prompt('스케줄 타입 (days|perWeek)', r.schedule?.type||'days')||r.schedule?.type||'days';
+                                    let schedule = {type};
+                                    if (type==='days') {
+                                      const daysStr = prompt('요일(0=일~6=토), 콤마구분', (r.schedule.days||[1,2,3,4,5]).join(','))||'';
+                                      schedule.days = daysStr.split(',').map(s=>parseInt(s)).filter(n=>!isNaN(n));
+                                    } else {
+                                      const perWeek = parseInt(prompt('주당 횟수', r.schedule.perWeek||3)||'3')||3;
+                                      schedule.perWeek = perWeek;
+                                    }
+                                    const color = prompt('색상(hex)', r.color||'#38bdf8')||r.color||'#38bdf8';
+                                    upsertRoutine({ ...r, title, schedule, color });
+                                  }}>편집</GhostBtn>
+                                  <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteRoutine(r.id); }}>삭제</GhostBtn>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
+                </>
+              )}
 
-            const toolbarButtons = [ { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>`, action: 'bold', title: '굵게' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>`, action: 'italic', title: '기울임' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h12v2H6zm8.12-3.29L18.83 9H16V7h6v6h-2V9.83l-4.71 4.71-1.42-1.42zM4 5h10v2H4z"/></svg>`, action: 'heading', title: '제목' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M6 17h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2v-2H6v2zm4 0h2v-2h-2v2zm4 0h2v-2h-2v2zm-8-4h2V7H6v2zm4 0h2V7h-2v2zm4 0h2V7h-2v2z"/></svg>`, action: 'blockquote', title: '인용문' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>`, action: 'link', title: '링크' }, { icon: `<svg viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`, action: 'image', title: '이미지' }, ];
-            toolbarButtons.forEach(btn => { const button = document.createElement('button'); button.type = 'button'; button.className = 'p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700'; button.title = btn.title; button.innerHTML = btn.icon; button.addEventListener('click', () => handleToolbarClick(btn.action)); editorToolbar.appendChild(button); });
+              {tab==='goals' && (
+                <>
+                  <Card>
+                    <CardHeader title="비전/장기 목표">
+                      <Button onClick={()=>{
+                        const title = prompt('목표 제목','5개년 재정 독립 기반 만들기');
+                        if (!title) return;
+                        const targetDate = prompt('목표 완료 예정일 (YYYY-MM-DD)', todayStr());
+                        upsertGoal({ title, targetDate, milestones: [] });
+                      }}>목표 추가</Button>
+                    </CardHeader>
+                    <CardBody>
+                      {goalsWithProgress.length===0 ? (
+                        <div className="text-sm text-slate-500">아직 목표가 없습니다. 상단의 목표 추가 버튼을 눌러보세요.</div>
+                      ) : (
+                        <ul className="space-y-4">
+                          {goalsWithProgress.map(g=> (
+                            <li key={g.id} className="rounded-xl border border-slate-200">
+                              <div className="p-3 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-semibold truncate">{g.title}</div>
+                                  <div className="text-xs text-slate-500">목표일: {formatDateK(g.targetDate)} · 진행률 {g._progress}%</div>
+                                </div>
+                                <div className="w-40"><Progress value={g._progress} /></div>
+                                <div className="flex items-center gap-2">
+                                  <GhostBtn onClick={()=>{
+                                    const title = prompt('목표 제목 수정', g.title)||g.title;
+                                    const targetDate = prompt('목표일 (YYYY-MM-DD)', g.targetDate)||g.targetDate;
+                                    upsertGoal({ ...g, title, targetDate });
+                                  }}>편집</GhostBtn>
+                                  <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteGoal(g.id); }}>삭제</GhostBtn>
+                                </div>
+                              </div>
+                              <div className="border-t border-slate-100 p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="text-sm font-medium">마일스톤</div>
+                                  <Button className="bg-slate-800 hover:bg-slate-900" onClick={()=>{
+                                    const title = prompt('마일스톤 제목','루틴 기반 건강 습관 확립');
+                                    if (!title) return;
+                                    const weight = clamp(parseInt(prompt('가중치(0~100)','25')||'25'));
+                                    const type = prompt('타입(manual|linked)','manual');
+                                    let mDraft = { title, weight, type };
+                                    if (type==='linked') {
+                                      const rId = prompt('연결할 루틴 ID (루틴 탭에서 찾을 수 있음)\n\n참고: 아래 드롭다운에서 선택하는 방식은 차후 업데이트 예정입니다.');
+                                      if (rId) mDraft.routineId = rId;
+                                    } else {
+                                      mDraft.progress = clamp(parseInt(prompt('현재 진행률(0~100)','0')||'0'));
+                                    }
+                                    upsertMilestone(g.id, mDraft);
+                                  }}>마일스톤 추가</Button>
+                                </div>
+                                {(g.milestones||[]).length===0 ? (
+                                  <div className="text-sm text-slate-500">마일스톤이 없습니다. 추가해보세요.</div>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {g.milestones.map(m=> (
+                                      <li key={m.id} className="rounded-lg border border-slate-200 p-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="font-medium truncate">{m.title} <span className="ml-2 text-xs text-slate-500">가중치 {m.weight}% · {m.type==='linked'? '루틴 연동' : '수동'}</span></div>
+                                            {m.type==='linked' && m.routineId && (
+                                              <div className="text-xs text-slate-500">연결 루틴 ID: {m.routineId} · 최근 4주 평균 완료율이 진행률로 반영됩니다.</div>
+                                            )}
+                                          </div>
+                                          <div className="w-32">
+                                            <Progress value={m.type==='linked' && m.routineId ? getRoutineWeeklyCompletion(state, m.routineId) : clamp(m.progress||0)} />
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex items-center gap-2">
+                                          {m.type==='manual' && (
+                                            <>
+                                              <input type="range" min="0" max="100" value={m.progress||0} onChange={(e)=> upsertMilestone(g.id, { ...m, progress: parseInt(e.target.value) })} className="w-full" />
+                                              <span className="text-xs w-10 text-right">{m.progress||0}%</span>
+                                            </>
+                                          )}
+                                          <GhostBtn onClick={()=>{
+                                            const title = prompt('마일스톤 제목', m.title)||m.title;
+                                            const weight = clamp(parseInt(prompt('가중치(0~100)', String(m.weight))||String(m.weight)));
+                                            let mDraft = { ...m, title, weight };
+                                            if (m.type==='linked') {
+                                              const routineId = prompt('연결 루틴 ID', m.routineId||'')||m.routineId||'';
+                                              mDraft.routineId = routineId;
+                                            } else {
+                                              const progress = clamp(parseInt(prompt('진행률(0~100)', String(m.progress||0))||String(m.progress||0)));
+                                              mDraft.progress = progress;
+                                            }
+                                            upsertMilestone(g.id, mDraft);
+                                          }}>편집</GhostBtn>
+                                          <GhostBtn onClick={()=>{ if(confirm('삭제할까요?')) deleteMilestone(g.id, m.id); }}>삭제</GhostBtn>
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
+                </>
+              )}
 
-            const handleToolbarClick = (action) => {
-                const textarea = postContentInput;
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const selectedText = textarea.value.substring(start, end);
-                const applyMarkdown = (p, s) => { const replacement = p + selectedText + s; textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end); textarea.focus(); textarea.selectionStart = start + p.length; textarea.selectionEnd = start + p.length + selectedText.length; textarea.dispatchEvent(new Event('input')); };
-                switch(action) {
-                    case 'bold': applyMarkdown('**', '**'); break;
-                    case 'italic': applyMarkdown('*', '*'); break;
-                    case 'heading': applyMarkdown('\n### ', '\n'); break;
-                    case 'blockquote': applyMarkdown('\n> ', '\n'); break;
-                    case 'link': const url = prompt('URL을 입력하세요:', 'https://'); if(url) applyMarkdown('[', `](${url})`); break;
-                    case 'image': const imageUrl = prompt('이미지 URL을 입력하세요:', 'https://'); if(imageUrl) applyMarkdown(`\n![이미지 설명](${imageUrl})\n`, ''); break;
-                }
-            };
-            
-            let posts = [];
-            let currentFilter = { search: '', tag: '' };
-            let editingPostId = null;
-            const converter = new showdown.Converter({ ghCompatibleHeaderId: true, simpleLineBreaks: true, strikethrough: true, tables: true });
-            
-            const showView = (viewName) => { Object.values(views).forEach(view => view.classList.remove('active')); if(views[viewName]) views[viewName].classList.add('active'); document.body.style.overflow = viewName === 'detail' ? 'hidden' : ''; document.documentElement.style.overflow = viewName === 'detail' ? 'hidden' : ''; };
-            
-            const postsCollection = firebase.collection(db, "posts");
-            const configDoc = firebase.doc(db, "config", "siteInfo");
+              {tab==='report' && (
+                <>
+                  <Card>
+                    <CardHeader title="최근 4주 루틴 완료율" />
+                    <CardBody>
+                      {state.routines.length===0 ? (
+                        <div className="text-sm text-slate-500">루틴이 없습니다.</div>
+                      ) : (
+                        <ul className="space-y-3">
+                          {state.routines.map(r=>{
+                            const pct = Math.round(getRoutineWeeklyCompletion(state, r.id));
+                            return (
+                              <li key={r.id} className="flex items-center gap-3">
+                                <span className="w-3 h-3 rounded-full" style={{background:r.color||'#38bdf8'}}></span>
+                                <div className="flex-1">
+                                  <div className="font-medium">{r.title}</div>
+                                  <div className="text-xs text-slate-500">최근 4주 평균 {pct}%</div>
+                                </div>
+                                <div className="w-40"><Progress value={pct} /></div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
 
-            const loadData = async () => {
-                try {
-                    const q = firebase.query(postsCollection, firebase.orderBy("createdAt", "desc"));
-                    const querySnapshot = await firebase.getDocs(q);
-                    posts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt?.toDate() || new Date() }));
-                } catch (e) { console.error("게시물 로딩 실패:", e); alert("게시물을 불러오는데 실패했습니다. Firebase 설정을 확인해주세요."); }
-            };
+                  <Card>
+                    <CardHeader title="목표 진행률 요약" />
+                    <CardBody>
+                      {goalsWithProgress.length===0 ? (
+                        <div className="text-sm text-slate-500">목표가 없습니다.</div>
+                      ) : (
+                        <ul className="space-y-3">
+                          {goalsWithProgress.map(g=> (
+                            <li key={g.id} className="flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{g.title}</div>
+                                <div className="text-xs text-slate-500">목표일 {formatDateK(g.targetDate)} · 진행률 {g._progress}%</div>
+                              </div>
+                              <div className="w-40"><Progress value={g._progress} /></div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
+                </>
+              )}
+            </main>
 
-            const loadSiteInfo = async () => {
-                try {
-                    const docSnap = await firebase.getDoc(configDoc);
-                    const data = docSnap.exists() ? docSnap.data() : { title: '나의 블로그', description: '이 공간은 생각과 지식을 기록하기 위해 만들어졌습니다.' };
-                    blogTitle.textContent = data.title;
-                    blogDescription.textContent = data.description;
-                    adminTitleInput.value = data.title;
-                    adminDescriptionInput.value = data.description;
-                } catch(e) { console.error("사이트 정보 로딩 실패:", e); }
-            };
+            {/* 푸터: 홈 화면 추가 안내 */}
+            <footer className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 bg-white">
+              <div className="flex items-center justify-between gap-3">
+                <div>GitHub Pages에 업로드 후, 크롬에서 <b>홈 화면에 추가</b>하면 앱처럼 사용 가능합니다.</div>
+                <GhostBtn onClick={()=> alert('안드로이드(갤럭시) 크롬: 우측 상단 ••• → 홈 화면에 추가')}>방법 보기</GhostBtn>
+              </div>
+            </footer>
+          </div>
+        );
+      }
 
-            const saveSiteInfo = async () => {
-                if (!auth.currentUser) { alert("로그인이 필요합니다."); return; }
-                try {
-                    await firebase.setDoc(configDoc, { title: adminTitleInput.value, description: adminDescriptionInput.value });
-                    loadSiteInfo();
-                    alert("정보가 저장되었습니다.");
-                    showView('main');
-                } catch (e) { console.error("사이트 정보 저장 실패:", e); }
-            };
-
-            const render = () => { renderPosts(); renderTags(); }
-            const renderPosts = () => {
-                postsList.innerHTML = '';
-                let filteredPosts = posts.filter(p => (!currentFilter.search || p.title.toLowerCase().includes(currentFilter.search.toLowerCase()) || p.content.toLowerCase().includes(currentFilter.search.toLowerCase())) && (!currentFilter.tag || (p.tags && p.tags.includes(currentFilter.tag))));
-                if (filteredPosts.length === 0) { postsList.innerHTML = `<li class="text-center py-10" style="color: var(--text-muted-color);">표시할 게시물이 없습니다.</li>`; return; }
-                filteredPosts.forEach(post => {
-                    const listItem = document.createElement('li');
-                    const excerpt = (post.content.replace(/<[^>]*>?/gm, '').replace(/[#*`>_~-]/g, '')).substring(0, 150) + '...';
-                    listItem.innerHTML = `<div class="group cursor-pointer p-6 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" data-id="${post.id}"><p class="text-sm" style="color: var(--text-muted-color);">${new Date(post.createdAt).toLocaleDateString('ko-KR')}</p><h2 class="text-2xl font-bold mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400" style="color: var(--heading-color);">${post.title}</h2><p class="mt-2 leading-relaxed">${excerpt}</p><div class="mt-4 flex flex-wrap gap-2">${(post.tags || []).map(tag => `<span class="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">${tag}</span>`).join('')}</div></div>`;
-                    postsList.appendChild(listItem);
-                });
-            }
-            const renderTags = () => {
-                const allTags = [...new Set(posts.flatMap(p => p.tags || []))];
-                tagsContainer.innerHTML = '';
-                const createTagButton = (tag, isAll = false) => { const button = document.createElement('button'); const isActive = (isAll && !currentFilter.tag) || (!isAll && currentFilter.tag === tag); button.className = `text-sm font-medium px-3 py-1 rounded-full transition-colors ${isActive ? 'bg-slate-800 text-white dark:bg-blue-600' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`; button.textContent = isAll ? '전체' : tag; button.onclick = () => { currentFilter.tag = isAll ? '' : tag; render(); }; return button; };
-                tagsContainer.appendChild(createTagButton(null, true));
-                allTags.forEach(tag => tagsContainer.appendChild(createTagButton(tag)));
-            }
-
-            const showPostDetail = (postId) => {
-                const post = posts.find(p => p.id == postId);
-                if (!post) return;
-                editPostBtn.dataset.id = postId;
-                deletePostBtn.dataset.id = postId;
-                detailTitle.textContent = post.title;
-                detailMeta.textContent = new Date(post.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-                detailTags.innerHTML = (post.tags || []).map(tag => `<span class="text-sm font-medium bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full">${tag}</span>`).join('');
-                detailContent.innerHTML = converter.makeHtml(post.content);
-                showView('detail');
-            }
-            
-            const updateUiForAuthState = (user) => {
-                const adminElements = document.querySelectorAll('.admin-only');
-                const authContainer = document.getElementById('auth-container');
-                if (user) {
-                    adminElements.forEach(el => el.style.display = 'flex');
-                    authContainer.innerHTML = `<button id="logout-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">로그아웃</button>`;
-                    document.getElementById('logout-btn').addEventListener('click', () => firebase.signOut(auth));
-                } else {
-                    adminElements.forEach(el => el.style.display = 'none');
-                    authContainer.innerHTML = `<button id="login-btn" class="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-white">Google 로그인</button>`;
-                    document.getElementById('login-btn').addEventListener('click', async () => {
-                        const provider = new firebase.GoogleAuthProvider();
-                        try { await firebase.signInWithPopup(auth, provider); } catch (error) { console.error("로그인 실패:", error); }
-                    });
-                }
-            };
-
-            postsList.addEventListener('click', (e) => { const postElement = e.target.closest('.group'); if (postElement) showPostDetail(postElement.dataset.id); });
-            backToListBtn.addEventListener('click', () => showView('main'));
-            editPostBtn.addEventListener('click', (e) => {
-                editingPostId = e.currentTarget.dataset.id;
-                const post = posts.find(p => p.id == editingPostId);
-                if (!post) return;
-                postTitleInput.value = post.title;
-                postContentInput.value = post.content;
-                postTagsInput.value = (post.tags || []).join(', ');
-                updatePreview();
-                postModal.classList.remove('hidden');
-});
-            deletePostBtn.addEventListener('click', async (e) => {
-                const idToDelete = e.currentTarget.dataset.id;
-                if (confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
-                    try {
-                        await firebase.deleteDoc(firebase.doc(db, "posts", idToDelete));
-                        await loadData();
-                        render();
-                        showView('main');
-                    } catch (err) { console.error("삭제 실패:", err); }
-                }
-            });
-
-            searchInput.addEventListener('input', (e) => { currentFilter.search = e.target.value; renderPosts(); });
-            const openPostModal = () => { editingPostId = null; postForm.reset(); updatePreview(); postModal.classList.remove('hidden'); };
-            const closePostModal = () => postModal.classList.add('hidden');
-            newPostBtn.addEventListener('click', openPostModal);
-            cancelPostBtn.addEventListener('click', closePostModal);
-
-            const updatePreview = () => { markdownPreview.innerHTML = converter.makeHtml(postContentInput.value); };
-            postContentInput.addEventListener('input', updatePreview);
-
-            postForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                if (!auth.currentUser) { alert("로그인이 필요합니다."); return; }
-                const postData = { title: postTitleInput.value, content: postContentInput.value, tags: postTagsInput.value.split(',').map(t => t.trim()).filter(Boolean) };
-                try {
-                    if (editingPostId) {
-                        await firebase.updateDoc(firebase.doc(db, "posts", editingPostId), postData);
-                    } else {
-                        postData.createdAt = firebase.serverTimestamp();
-                        await firebase.addDoc(postsCollection, postData);
-                    }
-                    await loadData();
-                    render();
-                    closePostModal();
-                } catch (err) { console.error("저장 실패: ", err); }
-            });
-            
-            goToAdminBtn.addEventListener('click', () => { if (auth.currentUser) showView('admin'); else alert("로그인이 필요합니다."); });
-            adminCancelBtn.addEventListener('click', () => showView('main'));
-            adminForm.addEventListener('submit', (e) => { e.preventDefault(); saveSiteInfo(); });
-            
-            const init = async () => {
-                setupDarkMode();
-                // 로그인 상태 확인을 먼저하고, 그 다음에 데이터를 불러옵니다.
-                firebase.onAuthStateChanged(auth, async (user) => {
-                    updateUiForAuthState(user);
-                    // 로그인 상태가 결정된 후 데이터를 로드하고 화면을 그립니다.
-                    if (!window.initialDataLoaded) {
-                        await loadSiteInfo();
-                        await loadData();
-                        render();
-                        window.initialDataLoaded = true; // 중복 로드를 방지합니다.
-                    }
-                });
-            };
-            
-            window.initialDataLoaded = false;
-            init();
-        });
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
-</body>
+  </body>
 </html>
