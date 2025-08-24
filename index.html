@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>올해는 얼마나 남았을까?</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,15 +12,30 @@
         <header>
             <h1>올해는 얼마나 남았을까?</h1>
             <p id="progress-text">계산 중...</p>
+            <p id="completion-rate">목표 완료율: 0%</p>
         </header>
         <main>
-            <div class="calendar-grid" id="calendar-grid">
-                </div>
+            <div class="calendar-container">
+                <div class="week-labels" id="week-labels">
+                    </div>
+                <div class="calendar-grid" id="calendar-grid">
+                    </div>
+            </div>
         </main>
         <footer>
             <p>Inspired by GitHub Contribution Graph</p>
         </footer>
     </div>
+
+    <div id="goal-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h3 id="modal-date"></h3>
+            <textarea id="goal-input" placeholder="오늘의 작은 목표를 세워보세요..."></textarea>
+            <button id="save-goal-button">저장하기</button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
